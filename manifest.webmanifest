@@ -1,0 +1,10 @@
+{
+  "name": "Toepen",
+  "short_name": "Toepen",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2a190d",
+  "theme_color": "#2a190d",
+  "icons": [{ "src": "icon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

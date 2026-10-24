@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <meta name="theme-color" content="#2a190d">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Toepen">
+  <title>Toepen</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon.svg">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fredoka:wght@500;600;700&family=Nunito:wght@500;700;800&display=swap">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<!-- START (telefoonversie): kamer maken of meedoen -->
+<div id="home" class="lobby" hidden>
+  <header class="lobby-head">
+    <h1 class="logo">Toepen<span>!</span></h1>
+    <p class="tag">Het kroegspel voor 2 tot 4 — gewoon op je telefoon</p>
+  </header>
+  <p id="homeBusy" class="panel busy" hidden></p>
+  <form id="homeForm" class="panel home">
+    <label for="homeName">Hoe heet je?</label>
+    <input id="homeName" class="field" maxlength="14" autocomplete="nickname" placeholder="Je naam">
+    <button class="btn primary big" type="button" data-act="host">Kamer maken</button>
+    <div class="or"><span>of doe mee met een kamer</span></div>
+    <div class="row">
+      <input id="homeCode" class="field code" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="CODE" aria-label="Kamercode" enterkeyhint="go">
+      <button id="homeJoinBtn" class="btn toep" type="button" data-act="joinCode">Meedoen</button>
+    </div>
+    <div id="homeResume" class="resume"></div>
+  </form>
+</div>
+
+<!-- LOBBY -->
+<div id="lobby" class="lobby" hidden>
+  <header class="lobby-head">
+    <h1 class="logo">Toepen<span>!</span></h1>
+    <p class="tag">Het kroegspel voor 2 tot 4 — gewoon op je telefoon</p>
+  </header>
+
+  <form id="joinForm" class="panel join" hidden>
+    <label for="nameInput">Hoe heet je?</label>
+    <div class="row">
+      <input id="nameInput" maxlength="14" autocomplete="nickname" placeholder="Je naam" enterkeyhint="go">
+      <button class="btn primary" type="submit">Aanschuiven</button>
+    </div>
+  </form>
+
+  <div id="lobbyBody" class="lobby-body"></div>
+
+  <section class="panel invite">
+    <div class="panel-head"><h2>Vrienden uitnodigen</h2></div>
+    <p id="inviteNote" class="note">Laat anderen de code scannen, de link openen of de code invullen.</p>
+    <div class="invite-row">
+      <div id="qr" class="qr" aria-hidden="true"></div>
+      <div id="inviteUrls" class="invite-urls"></div>
+    </div>
+  </section>
+</div>
+
+<!-- SPEL -->
+<div id="game" class="game" hidden>
+  <header class="hud">
+    <div class="brand">Toepen<span>!</span></div>
+    <div id="info" class="info"></div>
+    <div id="stake" class="stake"></div>
+    <button class="iconbtn" data-act="openMenu" aria-label="Menu en spelregels">☰</button>
+  </header>
+
+  <main class="felt">
+    <div id="opp-top" class="opp-slot slot-top"></div>
+    <div id="opp-left" class="opp-slot slot-left"></div>
+    <div id="opp-right" class="opp-slot slot-right"></div>
+    <div id="trick" class="trick"></div>
+    <div id="splash" class="splash" aria-live="assertive"></div>
+  </main>
+
+  <section id="prompt" class="prompt" aria-live="polite"></section>
+
+  <section class="mine">
+    <div id="mebar" class="mebar"></div>
+    <div id="hand" class="hand"></div>
+  </section>
+</div>
+
+<div id="overlay" class="overlay" hidden></div>
+
+<!-- MENU / SPELREGELS -->
+<div id="drawer" class="drawer" aria-hidden="true">
+  <div class="drawer-scrim" data-act="closeMenu"></div>
+  <aside class="drawer-in">
+    <div class="drawer-head">
+      <h2>Spelregels</h2>
+      <button class="iconbtn" data-act="closeMenu" aria-label="Sluiten">✕</button>
+    </div>
+    <div class="rules">
+      <h3>Klassiek toepen</h3>
+      <ul>
+        <li>32 kaarten (7 t/m aas). Iedereen krijgt <b>4 kaarten</b>.</li>
+        <li>Van laag naar hoog: <b>B · V · H · A · 7 · 8 · 9 · 10</b>. De 10 is de hoogste!</li>
+        <li><b>Kleur bekennen</b> is verplicht. De hoogste kaart in de gevraagde kleur wint de slag.</li>
+        <li>Alleen de <b>laatste (4e) slag</b> telt: wie die wint, wint de ronde. De rest krijgt strafpunten ter hoogte van de inzet.</li>
+        <li><b>Toepen:</b> op je beurt verhoog je de inzet met 1. De anderen gaan <b>mee</b> of <b>passen</b>. Passen kost de inzet van vóór de toep.</li>
+        <li>Je mag niet twee keer achter elkaar toepen: eerst moet iemand anders toepen.</li>
+        <li><b>Blind:</b> vóór iemand zijn kaarten bekijkt, mag je blind spelen voor 2, 3 of 4 punten (max. 2× per potje). De anderen kiezen <b>blind mee</b> (voor het bedrag) of <b>gezien</b>: dan kijk je eerst en ga je mee voor 1 extra punt, of weg voor het bedrag.</li>
+        <li>Bij <b>15 strafpunten</b> ben je af (in de lobby kun je ook 10 kiezen). De laatste die overblijft, wint.</li>
+        <li><b>Op scherp:</b> staat iemand op 14, dan moet hij genomen worden. Iedereen bekijkt zijn kaarten: mee is voor 2 punten, weg kost 1.</li>
+        <li><b>Finale:</b> staan alle overgebleven spelers op 14, dan krijgt iedereen 8 kaarten. Niet toepen; de laatste slag beslist.</li>
+        <li>Op 14 mag je niet toepen. Zit je nog één tegen één met iemand op 14, dan toept niemand meer.</li>
+      </ul>
+      <h3>Spelvorm Finale</h3>
+      <ul>
+        <li>Eén ronde, <b>8 kaarten</b> per persoon, niet toepen. Wie de laatste slag wint, wint het potje.</li>
+      </ul>
+      <p class="rules-note">Alle spelvormen kun je met 2, 3 of 4 spelers spelen.</p>
+      <h3>Kroegregels (aan/uit in de lobby)</h3>
+      <ul>
+        <li>🧺 <b>Was</b>: vier plaatjes/azen (of drie + een 7)? Claim een was voor nieuwe kaarten. Controleren mag: klopt het, strafpunt voor de controleur, bluf je, strafpunt voor jou.</li>
+        <li>🔁 <b>Doorgeven</b>: na het delen geef je 1 kaart door aan je linkerbuur.</li>
+        <li>✌️ <b>Dubbel toepen</b>: één keer per ronde verhoog je de inzet met 2.</li>
+        <li>🧑‍🌾 <b>Boerenslag</b>: win je de laatste slag met een boer, dan krijgen de verliezers 1 extra.</li>
+        <li>💪 <b>Comeback</b>: win je een ronde terwijl je op scherp staat (1 punt van af), dan gaat er 1 strafpunt af.</li>
+      </ul>
+    </div>
+    <h3 class="log-title">Gewonnen potjes</h3>
+    <ol id="winList" class="loglist wins-list"></ol>
+    <h3 class="log-title">Wat er gebeurde</h3>
+    <ol id="logList" class="loglist"></ol>
+    <div id="drawerActions" class="drawer-actions"></div>
+  </aside>
+</div>
+
+<div id="toasts" class="toasts" aria-live="polite"></div>
+<div id="conn" class="conn" hidden>Verbinding kwijt… opnieuw verbinden</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" defer></script>
+<script src="game.js" defer></script>
+<script src="app.js" defer></script>
+</body>
+</html>
