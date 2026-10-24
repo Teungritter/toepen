@@ -8,7 +8,13 @@
   const ORDER = ['J', 'Q', 'K', 'A', '7', '8', '9', '10'];
   const SUIT_ORDER = ['S', 'H', 'C', 'D'];
   const POS = ['bottom', 'left', 'top', 'right'];
-  const LEVEL_NAME = { makkelijk: 'Makkelijk', gemiddeld: 'Gemiddeld', moeilijk: 'Moeilijk', god: 'God' };
+  const THEMES = [
+    { key: 'cafe', name: 'Bruin café', swatch: ['#2a190d', '#1f7a4d', '#fdf7e7', '#ff7a1a'] },
+    { key: 'delft', name: 'Delfts blauw', swatch: ['#eef3fa', '#ffffff', '#1d3f8f', '#ff7a00'] },
+    { key: 'nacht', name: 'Nachtkroeg', swatch: ['#14112b', '#221d47', '#21e6c1', '#ff3c8e'] },
+    { key: 'strak', name: 'Strak en licht', swatch: ['#f4f4f5', '#ffffff', '#111111', '#0090ff'] },
+  ];
+  const LEVEL_NAME ={ makkelijk: 'Makkelijk', gemiddeld: 'Gemiddeld', moeilijk: 'Moeilijk', god: 'God' };
   const HOUSE_RULES = [
     { key: 'was', icon: '🧺', name: 'Was', text: 'Vier plaatjes/azen (of drie + een 7)? Claim een was voor nieuwe kaarten. Controleren mag.' },
     { key: 'pass', icon: '🔁', name: 'Doorgeven', text: 'Na het delen geeft iedereen 1 kaart door aan zijn linkerbuur.' },
@@ -113,6 +119,7 @@
     net.role = 'host';
     net.room = resume ? resume.room : newCode();
     net.table = new window.Toepen.Table({
+      hostPid: pid,
       onChange: hostBroadcast,
       isConnected: id => id === pid || [...net.conns.values()].some(c => c.pid === id && c.conn.open),
     });
@@ -357,6 +364,7 @@
     const inGame = S.phase !== 'lobby';
     $('#home').hidden = true;
     $('#lobby').hidden = inGame;
+    applyTheme(S.settings.theme);
     $('#game').hidden = !inGame;
 
     const key = `${S.phase}|${S.turn}|${S.trickNo}|${S.round}`;
@@ -367,6 +375,30 @@
     renderDrawer();
     handleLogs();
     notify();
+  }
+
+  // ----- stijl -----
+
+  // De host kiest de stijl; iedereen aan tafel krijgt hem te zien.
+  function applyTheme(theme) {
+    theme = THEMES.some(t => t.key === theme) ? theme : 'cafe';
+    const root = document.documentElement;
+    if ((root.dataset.theme || 'cafe') === theme && store('toep_theme') === theme) return;
+    if (theme === 'cafe') delete root.dataset.theme;
+    else root.dataset.theme = theme;
+    store('toep_theme', theme);
+    const bg = getComputedStyle(root).getPropertyValue('--wood').trim();
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta && bg) meta.content = bg;
+  }
+
+  function themePicker() {
+    const current = S.settings.theme || 'cafe';
+    const dis = S.isHost ? '' : 'disabled';
+    return `<div class="themes">${THEMES.map(t =>
+      `<button class="theme-opt" data-act="theme" data-key="${t.key}" aria-pressed="${current === t.key}" ${dis}>` +
+      `<span class="swatch">${t.swatch.map(c => `<i style="background:${c}"></i>`).join('')}</span><b>${t.name}</b></button>`).join('')}</div>` +
+      (S.isHost ? '' : '<p class="note" style="margin:10px 0 0">De host kiest de stijl.</p>');
   }
 
   // ----- lobby -----
@@ -436,6 +468,10 @@
         </div>
         ${maxRow}
         ${rules}
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>Stijl</h2></div>
+        ${themePicker()}
       </section>
       <div class="lobby-actions">
         <button class="btn primary big" data-act="start" ${seated && filled >= 2 ? '' : 'disabled'}>${startLabel}</button>
@@ -850,7 +886,8 @@
       : '<li>Nog geen potje uitgespeeld.</li>';
     $('#logList').innerHTML = logs.slice(-12).map(l => `<li>${esc(l.text)}</li>`).join('') || '<li>Nog niets gebeurd.</li>';
     const inGame = S.phase !== 'lobby' && S.me != null;
-    let actions = inGame ? '<button class="btn dark" data-act="lobby">Spel stoppen → lobby</button>' : '';
+    let actions = S.phase !== 'lobby' && S.isHost ? `<h3 class="log-title">Stijl</h3>${themePicker()}` : '';
+    if (inGame) actions += '<button class="btn dark" data-act="lobby">Spel stoppen → lobby</button>';
     if (net.role) {
       const label = net.role === 'host' ? `Kamer ${esc(net.room)} sluiten` : `Kamer ${esc(net.room)} verlaten`;
       actions += `<button class="btn dark" data-act="leaveRoom">${label}</button>`;
@@ -950,6 +987,7 @@
       case 'blindResp': return act('blindResp', { choice: d.choice });
       case 'scherp': return act('scherp', { go: d.go === '1' });
       case 'botLevel': return act('botLevel', { seat: Number(d.seat) });
+      case 'theme': return act('theme', { theme: d.key });
       case 'wash': return act('wash', { claim: d.claim === '1' });
       case 'check': return act('washResponse', { check: true });
       case 'believe': return act('washResponse', { check: false });
@@ -1026,6 +1064,7 @@
     e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
   });
 
+  applyTheme(store('toep_theme')); // laatste stijl al tonen op het startscherm
   $('#nameInput').value = store('toep_name') || '';
   $('#homeName').value = store('toep_name') || '';
   window.addEventListener('load', () => { if (S) renderInvite(); });

@@ -14,6 +14,7 @@
   const BOT_NAMES = ['Henk', 'Truus', 'Kees', 'Ans', 'Gerrit', 'Bep'];
   const LEVELS = ['makkelijk', 'gemiddeld', 'moeilijk', 'god'];
   const FACES = ['J', 'Q', 'K', 'A'];
+  const THEMES = ['cafe', 'delft', 'nacht', 'strak'];
   const MAX_BLINDS = 2;        // per speler per potje
   const BLIND_AMOUNTS = [2, 3, 4];
 
@@ -126,14 +127,16 @@
     'washCheck', 'washQueue', 'result', 'trickWinner', 'winner', 'nextRoundAt', 'deck', 'roundPlayed', 'voids'];
 
   class Table {
-    constructor({ onChange = () => {}, isConnected = () => true, delay = 1 } = {}) {
+    constructor({ onChange = () => {}, isConnected = () => true, delay = 1, hostPid = null } = {}) {
       this.onChange = onChange;
       this.isConnected = isConnected;
       this.delay = delay;
+      this.hostPid = hostPid; // alleen de host mag de stijl kiezen
       this.seats = [null, null, null, null];
       this.settings = {
         mode: 'klassiek',
         maxPoints: 15,
+        theme: 'cafe',
         rules: { was: true, pass: true, double: true, boer: true, comeback: true },
       };
       this.logs = [];
@@ -230,6 +233,7 @@
           case 'removeBot': this.removeBot(msg.seat); break;
           case 'botLevel': this.cycleBotLevel(msg.seat); break;
           case 'settings': this.setSettings(msg); break;
+          case 'theme': this.setTheme(pid, msg.theme); break;
           case 'start': this.start(); break;
           case 'blind': this.doBlind(p, msg.amount || 0); break;
           case 'blindResp': this.doBlindResp(p, msg.choice); break;
@@ -329,6 +333,13 @@
       if (['klassiek', 'kroeg', 'finale'].includes(m.mode)) s.mode = m.mode;
       if (m.maxPoints === 10 || m.maxPoints === 15) s.maxPoints = m.maxPoints;
       if (m.rule in s.rules) s.rules[m.rule] = !s.rules[m.rule];
+    }
+
+    // Stijl van het spel voor iedereen; mag ook tijdens het spel.
+    setTheme(pid, theme) {
+      if (this.hostPid && pid !== this.hostPid) fail('Alleen de host kan de stijl kiezen.');
+      if (!THEMES.includes(theme)) fail('Onbekende stijl.');
+      this.settings.theme = theme;
     }
 
     start() {
@@ -976,6 +987,7 @@
         tricksTotal: this.tricksTotal, final: this.final, edge: this.edge,
         turn: this.turn, leader: this.leader, lastToeper: this.lastToeper,
         settings: this.settings, me: me ? me.seat : null, maxBlinds: MAX_BLINDS, gamesPlayed: this.gamesPlayed,
+        isHost: !!me && (!this.hostPid || me.id === this.hostPid),
         players: this.seats.map(p => this.playerView(p)),
         trick: this.trick, trickWinner: this.trickWinner,
         toep: this.toep, blind: this.blind, scherp: this.scherp,
@@ -1005,5 +1017,5 @@
     }
   }
 
-  root.Toepen = { Table, GameError, LEVELS, MAX_BLINDS };
+  root.Toepen = { Table, GameError, LEVELS, MAX_BLINDS, THEMES };
 })(typeof window !== 'undefined' ? window : globalThis);
