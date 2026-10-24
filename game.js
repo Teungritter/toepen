@@ -15,6 +15,7 @@
   const LEVELS = ['makkelijk', 'gemiddeld', 'moeilijk', 'god'];
   const FACES = ['J', 'Q', 'K', 'A'];
   const THEMES = ['cafe', 'delft', 'nacht', 'strak'];
+  const REACTIONS = ['🍺', '👏', '😏', '😱', '😂', '🔥'];
   const MAX_BLINDS = 2;        // per speler per potje
   const BLIND_AMOUNTS = [2, 3, 4];
 
@@ -103,9 +104,14 @@
   }
 
   function newPlayer(id, name, bot, seat) {
-    const p = { id, name, bot, seat, level: 'gemiddeld', points: 0, dead: false, blindsUsed: 0, wins: 0 };
+    const p = { id, name, bot, seat, level: 'gemiddeld', points: 0, dead: false, blindsUsed: 0, wins: 0, stats: newStats() };
     resetRound(p);
     return p;
+  }
+
+  // Statistieken per potje, voor het eindscherm.
+  function newStats() {
+    return { rounds: 0, toeps: 0, toepWins: 0, folds: 0, blinds: 0, bigPot: 0 };
   }
 
   function resetRound(p) {
@@ -119,6 +125,7 @@
     p.passCard = null;
     p.doubleUsed = false;
     p.received = null;
+    p.toeped = false;         // heeft deze ronde getoept (voor de statistieken)
   }
 
   // Alles wat nodig is om een spel na een herlaadactie van de host te hervatten.
@@ -143,6 +150,8 @@
       this.logSeq = 0;
       this.botSeq = 0;
       this.gamesPlayed = 0;
+      this.reactions = [];
+      this.reactSeq = 0;
       this.phaseGen = 0;
       this.botPending = false;
       this.toLobby();
@@ -211,6 +220,7 @@
 
     restore(json) {
       Object.assign(this, JSON.parse(json));
+      for (const p of this.seated()) if (!p.stats) p.stats = newStats(); // opgeslagen door een oudere versie
       // Lopende pauzes opnieuw starten.
       if (this.phase === 'trickEnd') this.after(TRICK_PAUSE, () => this.finishTrick());
       if (this.phase === 'roundEnd') {
@@ -234,6 +244,7 @@
           case 'botLevel': this.cycleBotLevel(msg.seat); break;
           case 'settings': this.setSettings(msg); break;
           case 'theme': this.setTheme(pid, msg.theme); break;
+          case 'react': this.react(p, msg.emoji); break;
           case 'start': this.start(); break;
           case 'blind': this.doBlind(p, msg.amount || 0); break;
           case 'blindResp': this.doBlindResp(p, msg.choice); break;
@@ -335,6 +346,17 @@
       if (m.rule in s.rules) s.rules[m.rule] = !s.rules[m.rule];
     }
 
+    // Snelle reactie (emoji) die even bij je naam verschijnt.
+    react(p, emoji) {
+      if (!REACTIONS.includes(emoji)) fail('Onbekende reactie.');
+      const now = Date.now();
+      if (now - (p.lastReact || 0) < 1200) fail('Rustig aan met reageren.');
+      p.lastReact = now;
+      this.reactSeq++;
+      this.reactions.push({ id: this.reactSeq, seat: p.seat, emoji });
+      this.reactions = this.reactions.slice(-12);
+    }
+
     // Stijl van het spel voor iedereen; mag ook tijdens het spel.
     setTheme(pid, theme) {
       if (this.hostPid && pid !== this.hostPid) fail('Alleen de host kan de stijl kiezen.');
@@ -349,6 +371,7 @@
         p.points = 0;
         p.dead = false;
         p.blindsUsed = 0;
+        p.stats = newStats();
       }
       this.round = 0;
       this.leader = choice(this.seated()).seat;
@@ -418,6 +441,7 @@
         if (!BLIND_AMOUNTS.includes(amount)) fail('Blind kan voor 2, 3 of 4 punten.');
         if (p.blindsUsed >= MAX_BLINDS) fail(`Je hebt al ${MAX_BLINDS}× blind gespeeld dit potje.`);
         p.blindsUsed++;
+        p.stats.blinds++;
         p.blindDecision = amount;
         this.stake = amount;
         this.blind = {
@@ -452,6 +476,7 @@
         p.blindResp = 'weg';
         p.folded = true;
         p.foldPenalty = n;
+        p.stats.folds++;
         this.log(`${p.name} gaat weg (${pointsText(n)})`, 'fold');
       } else {
         fail('Dat kan nu niet.');
@@ -477,6 +502,7 @@
       } else {
         p.folded = true;
         p.foldPenalty = 1;
+        p.stats.folds++;
         this.log(`${p.name} gaat weg (1 strafpunt)`, 'fold');
       }
       if (!sc.pending.length) {
@@ -674,6 +700,8 @@
       const prev = this.stake;
       this.stake += amount;
       this.lastToeper = p.seat;
+      p.toeped = true;
+      p.stats.toeps++;
       this.toep = {
         by: p.seat, amount, prev, responses: {},
         pending: this.orderFrom(p.seat).filter(s => s !== p.seat && !this.seats[s].dead && !this.seats[s].folded),
@@ -692,6 +720,7 @@
       } else {
         p.folded = true;
         p.foldPenalty = t.prev + p.extra;
+        p.stats.folds++;
         this.log(`${p.name} past (${pointsText(p.foldPenalty)})`, 'fold');
       }
       if (!t.pending.length) {
@@ -707,6 +736,8 @@
     endRound(w, byFold) {
       this.cancelAfter();
       const winner = this.seats[w];
+      winner.stats.rounds++;
+      if (winner.toeped) winner.stats.toepWins++;
       if (this.finaleMode) {
         // Geen strafpunten: wie de laatste slag wint, wint het potje.
         this.result = { winner: w, final: true, lines: [] };
@@ -729,6 +760,8 @@
         p.points += pen;
         lines.push({ seat: p.seat, pen, note });
       }
+      // Grootste pot: alle strafpunten die de anderen deze ronde kregen.
+      winner.stats.bigPot = Math.max(winner.stats.bigPot, lines.reduce((sum, l) => sum + l.pen, 0));
       const comeback = !!this.rules.comeback && winner.points === this.edge;
       if (comeback) winner.points--;
       lines.push({ seat: w, pen: comeback ? -1 : 0, note: comeback ? 'comeback' : 'winnaar' });
@@ -974,7 +1007,7 @@
       if (!p) return null;
       return {
         seat: p.seat, name: p.name, bot: p.bot, level: p.bot ? p.level : null,
-        points: p.points, wins: p.wins, dead: p.dead, folded: p.folded, cards: p.hand.length, extra: p.extra,
+        points: p.points, wins: p.wins, stats: p.stats, dead: p.dead, folded: p.folded, cards: p.hand.length, extra: p.extra,
         online: p.bot || this.isConnected(p.id), acting: this.needsAction(p),
       };
     }
@@ -994,7 +1027,7 @@
         washCheck: this.washCheck ? { seat: this.washCheck.seat, pending: this.washCheck.pending } : null,
         result: this.result,
         nextRoundIn: ph === 'roundEnd' ? Math.max(0, this.nextRoundAt - Date.now()) : 0,
-        winner: this.winner, log: this.logs.slice(-20),
+        winner: this.winner, log: this.logs.slice(-20), reactions: this.reactions,
       };
       if (me) {
         // Bij blind kijkt niemand: de kaarten blijven dicht tot je 'gezien' kiest.
@@ -1017,5 +1050,5 @@
     }
   }
 
-  root.Toepen = { Table, GameError, LEVELS, MAX_BLINDS, THEMES };
+  root.Toepen = { Table, GameError, LEVELS, MAX_BLINDS, THEMES, REACTIONS };
 })(typeof window !== 'undefined' ? window : globalThis);

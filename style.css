@@ -1,5 +1,15 @@
 /* Toepen — bruin café: houten tafel, groen laken, krijtstreepjes op het bord */
 
+/* Lettertypes lokaal meegeleverd (SIL Open Font License), variabel gewicht */
+@font-face {
+  font-family: 'Fredoka'; font-style: normal; font-weight: 300 700; font-display: swap;
+  src: url(fonts/fredoka.woff2) format('woff2');
+}
+@font-face {
+  font-family: 'Nunito'; font-style: normal; font-weight: 200 1000; font-display: swap;
+  src: url(fonts/nunito.woff2) format('woff2');
+}
+
 :root {
   --wood: #2a190d;
   --wood-2: #3d2513;
@@ -489,13 +499,13 @@ input { font: inherit; }
   line-height: 1;
 }
 .card .face {
-  width: 48%; height: 52%;
+  width: 54%; height: 58%;
   border: 2px solid currentColor; border-radius: calc(var(--w) * .08);
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  font-size: calc(var(--w) * .34); font-weight: 700;
+  display: flex; align-items: flex-end; justify-content: center;
   background: color-mix(in srgb, currentColor 9%, transparent);
+  overflow: hidden;
 }
-.card .face i { font-style: normal; font-size: calc(var(--w) * .2); }
+.card .face svg { width: 100%; height: 100%; display: block; }
 .card.sH { color: var(--red); }
 .card.sD { color: var(--blue); }
 .card.sC { color: var(--green); }
@@ -686,6 +696,58 @@ input { font: inherit; }
 :root[data-theme="strak"] .field, :root[data-theme="strak"] .join input { box-shadow: inset 0 0 0 2px var(--glass-line); }
 :root[data-theme="delft"] .lvl-makkelijk, :root[data-theme="strak"] .lvl-makkelijk { color: var(--ok); background: rgba(48, 164, 108, .14); }
 :root[data-theme="delft"] .lvl-moeilijk, :root[data-theme="strak"] .lvl-moeilijk { color: var(--orange-2); background: rgba(255, 122, 0, .14); }
+
+/* kaarten delen en de slag naar de winnaar schuiven */
+.card.deal { animation: dealIn .42s cubic-bezier(.2, .9, .3, 1.15) both; }
+@keyframes dealIn { from { opacity: 0; transform: translateY(-140px) rotate(-14deg) scale(.6); } }
+.trick.collect .tslot .card { animation: collect 1.25s ease-in forwards; }
+@keyframes collect {
+  0%, 50% { transform: none; opacity: 1; }
+  100% { transform: translate(var(--cx), var(--cy)) scale(.45); opacity: 0; }
+}
+
+/* reacties */
+.mine { position: relative; }
+.react-btn {
+  flex: none; width: 38px; height: 38px; border: 0; border-radius: 50%;
+  background: var(--glass); font-size: 20px; line-height: 1;
+}
+.mebar .pts { margin-left: auto; }
+.react-tray {
+  position: absolute; right: 10px; bottom: calc(100% - 4px); z-index: 6;
+  display: flex; gap: 4px; padding: 6px;
+  background: var(--cream); border-radius: 999px;
+  box-shadow: 0 4px 0 var(--cream-2), 0 10px 24px rgba(0, 0, 0, .35);
+}
+.react-tray button { border: 0; background: none; font-size: 26px; width: 44px; height: 44px; border-radius: 50%; }
+.react-tray button:active { background: rgba(0, 0, 0, .08); }
+.bubbles { position: fixed; inset: 0; pointer-events: none; z-index: 55; }
+.bubble {
+  position: absolute; transform: translate(-50%, -100%);
+  font-size: 34px; line-height: 1;
+  animation: bubble 2.3s ease-out forwards;
+}
+@keyframes bubble {
+  0% { opacity: 0; transform: translate(-50%, -60%) scale(.4); }
+  15% { opacity: 1; transform: translate(-50%, -110%) scale(1.15); }
+  25% { transform: translate(-50%, -110%) scale(1); }
+  80% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -230%); }
+}
+
+/* statistieken op het eindscherm */
+.stats { margin: 0 0 16px; text-align: left; }
+.titles { list-style: none; margin: 0 0 10px; padding: 0; display: grid; gap: 4px; font-size: 14px; }
+.titles li { display: flex; gap: 6px; align-items: baseline; }
+.titles small { color: var(--muted); font-size: 12px; }
+.stats table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.stats th { color: var(--muted); font-weight: 700; text-align: right; padding: 3px 4px; }
+.stats td { text-align: right; padding: 4px; border-top: 1px solid rgba(0, 0, 0, .08); }
+.stats td:first-child { text-align: left; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stats-note { margin: 4px 0 0; font-size: 11px; color: var(--muted); }
+
+/* voorkeuren in het menu */
+.prefs { display: grid; gap: 8px; margin-top: 14px; }
 
 /* stijlkeuze */
 .themes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }

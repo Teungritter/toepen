@@ -55,7 +55,12 @@
   let splashTimer = 0;
   let qrUrl = '';
   let sending = false;
-  const animSeen = new Set();
+  const animSeen = new Map();  // kaart op tafel -> moment dat hij verscheen
+  let lastTrickHtml = '';
+  let lastHandHtml = '';
+  let dealKey = '';
+  let dealUntil = 0;
+  let seenReact = -1;
 
   // ---------- verbinding ----------
   // De host-telefoon draait game.js zelf; de anderen verbinden rechtstreeks met
@@ -78,7 +83,7 @@
     if (window.Peer) return Promise.resolve();
     return new Promise((resolve, reject) => {
       const s = document.createElement('script');
-      s.src = 'https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js';
+      s.src = 'vendor/peerjs.min.js'; // PeerJS 1.5.4, lokaal meegeleverd
       s.onload = resolve;
       s.onerror = () => reject(new Error('PeerJS kon niet laden. Heb je internet?'));
       document.head.append(s);
@@ -313,9 +318,29 @@
 
   // ---------- bouwstenen ----------
 
+  // Getekende plaatjes in de kleur van de kaart (currentColor): boer, vrouw, heer.
+  const SKIN = '#f6dcc0', GOLD = '#e8b33a';
+  const FIGURES = {
+    J: `<svg viewBox="0 0 40 52" aria-hidden="true"><path d="M10 16 Q11 6 21 7 Q31 7 31 14 Q26 12 22 13 Q16 14 10 16Z" fill="currentColor"/>` +
+      `<circle cx="20" cy="20" r="6.5" fill="${SKIN}" stroke="currentColor" stroke-width="1.2"/>` +
+      `<path d="M13 28 L27 28 L25 31.5 L15 31.5Z" fill="#fff" stroke="currentColor" stroke-width="1"/>` +
+      `<path d="M8 51 Q9 34 20 31.5 Q31 34 32 51Z" fill="currentColor"/>` +
+      `<circle cx="20" cy="38" r="1.6" fill="#fff"/><circle cx="20" cy="44.5" r="1.6" fill="#fff"/></svg>`,
+    Q: `<svg viewBox="0 0 40 52" aria-hidden="true"><path d="M11.5 27 Q10 11 20 11 Q30 11 28.5 27 Q26.5 22 26 18 L14 18 Q13.5 22 11.5 27Z" fill="currentColor"/>` +
+      `<path d="M14 12 L15.5 6 L20 9.5 L24.5 6 L26 12Z" fill="${GOLD}" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/>` +
+      `<circle cx="20" cy="20" r="6" fill="${SKIN}" stroke="currentColor" stroke-width="1.2"/>` +
+      `<path d="M8 51 Q9 33 20 29.5 Q31 33 32 51Z" fill="currentColor"/>` +
+      `<path d="M13.5 36 Q20 41.5 26.5 36" stroke="#fff" stroke-width="1.6" fill="none"/></svg>`,
+    K: `<svg viewBox="0 0 40 52" aria-hidden="true"><path d="M10 14 L12.5 5 L16.5 10 L20 3.5 L23.5 10 L27.5 5 L30 14Z" fill="${GOLD}" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>` +
+      `<circle cx="20" cy="20" r="6.5" fill="${SKIN}" stroke="currentColor" stroke-width="1.2"/>` +
+      `<path d="M13.5 21 Q20 34 26.5 21 Q25 28.5 20 29.5 Q15 28.5 13.5 21Z" fill="currentColor"/>` +
+      `<path d="M7 51 Q8 34 20 30.5 Q32 34 33 51Z" fill="currentColor"/>` +
+      `<path d="M20 32 L20 51" stroke="#fff" stroke-width="1.6"/></svg>`,
+  };
+
   function cardHTML(c, cls = '', attrs = '') {
     const r = rankOf(c), s = suitOf(c), label = RL[r] || r;
-    const center = RL[r] && r !== 'A' ? `<span class="face">${label}<i>${SYM[s]}</i></span>` : SYM[s];
+    const center = FIGURES[r] ? `<span class="face">${FIGURES[r]}</span>` : SYM[s];
     return `<div class="card s${s} ${cls}" ${attrs} aria-label="${SUIT_NAME[s]} ${label}">` +
       `<div class="ci"><b>${label}</b><i>${SYM[s]}</i></div>` +
       `<div class="cc">${center}</div>` +
@@ -374,6 +399,7 @@
     renderOverlay();
     renderDrawer();
     handleLogs();
+    handleReactions();
     notify();
   }
 
@@ -570,7 +596,7 @@
     if (!p) return '';
     const chip = statusChip(p);
     const backs = Array.from({ length: p.cards }, () => '<i class="mback"></i>').join('');
-    return `<div class="opp ${p.acting ? 'acting' : ''} ${p.folded ? 'folded' : ''} ${p.dead ? 'dead' : ''}">
+    return `<div class="opp ${p.acting ? 'acting' : ''} ${p.folded ? 'folded' : ''} ${p.dead ? 'dead' : ''}" data-seat="${p.seat}">
       <div class="av">${p.bot ? '🤖' : initial(p.name)}${p.online ? '' : '<span class="off" title="Offline">!</span>'}</div>
       <div class="ob">
         <div class="nm">${esc(p.name)}</div>
@@ -596,18 +622,35 @@
       if (S.phase === 'scherp') sub = `${S.scherp.seats.map(nameOf).map(esc).join(' en ')} moet genomen worden`;
       html = `<div class="hint"><div><div class="hint-big">Ronde ${S.round}</div><div>${sub}</div></div></div>`;
     }
+    const now = Date.now();
     for (const t of S.trick) {
       const pos = layout()[t.seat] || POS[rel(t.seat)];
       const key = `${S.round}.${S.trickNo}.${t.seat}.${t.card}`;
-      const enter = !animSeen.has(key);
-      animSeen.add(key);
+      if (!animSeen.has(key)) {
+        animSeen.set(key, now);
+        play('card');
+      }
+      const enter = now - animSeen.get(key) < 450;
       const p = S.players[t.seat];
       let cls = '';
       if (S.trickWinner === t.seat) cls = 'win';
       else if (S.trickWinner >= 0 || (p && p.folded)) cls = 'lose';
       html += `<div class="tslot t-${pos} ${cls}">${cardHTML(t.card, enter ? 'enter from-' + pos : '')}</div>`;
     }
-    $('#trick').innerHTML = html;
+    // Na de slag schuiven de kaarten naar de winnaar.
+    const el = $('#trick');
+    const collectTo = S.phase === 'trickEnd' && S.trickWinner >= 0 ? layout()[S.trickWinner] : null;
+    el.classList.toggle('collect', !!collectTo);
+    if (collectTo) {
+      const [cx, cy] = { bottom: [0, 150], top: [0, -150], left: [-140, 0], right: [140, 0] }[collectTo];
+      el.style.setProperty('--cx', cx + 'px');
+      el.style.setProperty('--cy', cy + 'px');
+    }
+    // Alleen opnieuw tekenen als er echt iets veranderd is, anders herstarten de animaties.
+    if (html !== lastTrickHtml) {
+      el.innerHTML = html;
+      lastTrickHtml = html;
+    }
   }
 
   function promptState() {
@@ -769,35 +812,49 @@
       (chip ? `<span class="chip ${chip.cls}">${chip.t}</span>` : '') +
       (inPlay && S.myExtra ? `<span class="chip hot">jij: ${S.stake + S.myExtra}</span>` : '') +
       (hasLives() ? `<span class="pts">${lives(p)} ${p.points}/${S.settings.maxPoints}</span>`
-        : `<span class="pts">🏆 ${p.wins}</span>`);
+        : `<span class="pts">🏆 ${p.wins}</span>`) +
+      `<button class="react-btn" data-act="reactMenu" aria-label="Reageren">😀</button>`;
   }
 
   function renderHand() {
     const el = $('#hand');
     const p = meP();
-    if (!p) { el.className = 'hand'; el.innerHTML = ''; return; }
+    if (!p) { el.className = 'hand'; el.innerHTML = ''; lastHandHtml = ''; return; }
     const hand = sortHand(S.hand || []);
     const legal = new Set(S.legal || []);
     const playing = S.phase === 'play' && S.turn === S.me;
     const passing = S.phase === 'pass' && S.passCard == null;
     if (selected && !hand.includes(selected)) selected = null;
+    // Nieuwe ronde (of de kaarten gaan open na blind): kaarten worden gedeeld.
+    const key = `${S.round}|${S.handHidden}|${S.gamesPlayed}`;
+    if (key !== dealKey) {
+      dealKey = key;
+      dealUntil = Date.now() + 900;
+      if (S.handCount) play('deal');
+    }
+    const deal = Date.now() < dealUntil;
+    const dealStyle = i => (deal ? ` style="animation-delay:${i * 70}ms"` : '');
+    let html;
     if (S.handHidden) {
       el.className = 'hand';
-      el.innerHTML = Array.from({ length: S.handCount }, () => '<div class="card back"></div>').join('');
-      return;
+      html = Array.from({ length: S.handCount }, (_, i) => `<div class="card back${deal ? ' deal' : ''}"${dealStyle(i)}></div>`).join('');
+    } else {
+      el.className = 'hand' + (playing ? ' playing' : '') + (hand.length > 4 ? ' many' : '');
+      html = hand.length ? hand.map((c, i) => {
+        const cls = [];
+        if ((playing && legal.has(c)) || passing) cls.push('legal');
+        if (selected === c || S.passCard === c) cls.push('sel');
+        if (S.received === c && S.trickNo === 1 && S.phase !== 'pass') cls.push('recv');
+        if (deal) cls.push('deal');
+        return cardHTML(c, cls.join(' '), `data-card="${c}" role="button"${dealStyle(i)}`);
+      }).join('') : `<div class="empty-hand">${p.dead ? 'Geen kaarten meer — je bent af.' : ''}</div>`;
     }
-    el.className = 'hand' + (playing ? ' playing' : '') + (hand.length > 4 ? ' many' : '');
-    if (!hand.length) {
-      el.innerHTML = `<div class="empty-hand">${p.dead ? 'Geen kaarten meer — je bent af.' : ''}</div>`;
-      return;
+    // Zelfde kaarten? Dan niet opnieuw tekenen, anders begint de deel-animatie opnieuw.
+    if (html !== lastHandHtml) {
+      el.innerHTML = html;
+      lastHandHtml = html;
     }
-    el.innerHTML = hand.map(c => {
-      const cls = [];
-      if ((playing && legal.has(c)) || passing) cls.push('legal');
-      if (selected === c || S.passCard === c) cls.push('sel');
-      if (S.received === c && S.trickNo === 1 && S.phase !== 'pass') cls.push('recv');
-      return cardHTML(c, cls.join(' '), `data-card="${c}" role="button"`);
-    }).join('');
+    if (deal) setTimeout(() => { if (S && Date.now() >= dealUntil) renderHand(); }, dealUntil - Date.now() + 20);
   }
 
   // ----- overlay -----
@@ -850,7 +907,7 @@
       const w = S.winner === S.me ? 'Jij wint het spel!' : `${esc(nameOf(S.winner))} wint het spel!`;
       const seated = S.me != null;
       html = `<div class="sheet"><div class="trophy">🏆</div><h2>${w}</h2><p class="sub">Potje ${S.gamesPlayed}, na ${S.round} ronde${S.round === 1 ? '' : 's'}. Wie geeft er een rondje?</p>` +
-        standingsHTML(null) +
+        standingsHTML(null) + statsHTML() +
         (seated ? `<div class="btns"><button class="btn primary big" data-act="rematch">Nog een potje!</button>` +
           `<button class="btn dark" data-act="toLobby">Naar de lobby</button></div>` : '') + `</div>`;
     }
@@ -863,9 +920,40 @@
     if (key !== overlayKey) {
       o.innerHTML = html;
       overlayKey = key;
+      // Geluid alleen als je zelf meespeelde.
+      const winner = S.phase === 'gameEnd' ? S.winner : S.result.winner;
+      const played = S.me != null && (S.phase === 'gameEnd' || S.result.lines.some(l => l.seat === S.me));
+      if (played) {
+        play(winner === S.me ? (S.phase === 'gameEnd' ? 'champion' : 'win') : 'lose');
+        if (winner === S.me) buzz([60, 40, 60, 40, 120]);
+      }
     }
     o.hidden = false;
     tickCountdown();
+  }
+
+  // Statistieken van het potje, met een paar titels voor de kroeg.
+  function statsHTML() {
+    const players = S.players.filter(p => p && p.stats);
+    if (!players.length || !hasLives()) return ''; // bij Finale (één ronde) zeggen de cijfers niets
+    const best = (key, label, icon, unit) => {
+      const top = players.reduce((b, p) => (p.stats[key] > (b ? b.stats[key] : 0) ? p : b), null);
+      return top ? `<li><span>${icon}</span><b>${label}</b> ${esc(top.name)} <small>(${top.stats[key]}${unit})</small></li>` : '';
+    };
+    const titles = [
+      best('toeps', 'Toepkoning', '👑', '× getoept'),
+      best('toepWins', 'Lef beloond', '💪', '× toep gewonnen'),
+      best('bigPot', 'Grootste pot', '💰', ' punten'),
+      best('blinds', 'Durfal', '🙈', '× blind'),
+      best('folds', 'Voorzichtig', '🐢', '× weg'),
+    ].join('');
+    const rows = players.map(p => {
+      const s = p.stats;
+      return `<tr><td>${esc(p.name)}</td><td>${s.rounds}</td><td>${s.toepWins}/${s.toeps}</td><td>${s.folds}</td><td>${s.blinds}</td></tr>`;
+    }).join('');
+    return `<div class="stats">${titles ? `<ul class="titles">${titles}</ul>` : ''}` +
+      `<table><thead><tr><th></th><th>Rondes</th><th>Toep</th><th>Weg</th><th>Blind</th></tr></thead><tbody>${rows}</tbody></table>` +
+      `<p class="stats-note">Toep = gewonnen / keer getoept</p></div>`;
   }
 
   function tickCountdown() {
@@ -896,6 +984,136 @@
   }
   function openMenu() { $('#drawer').classList.add('open'); $('#drawer').setAttribute('aria-hidden', 'false'); }
   function closeMenu() { $('#drawer').classList.remove('open'); $('#drawer').setAttribute('aria-hidden', 'true'); }
+
+  // ---------- geluid en trillen ----------
+  // Alle geluiden worden ter plekke gemaakt (Web Audio), dus geen geluidsbestanden nodig.
+
+  const prefs = { sound: store('toep_sound') !== '0', buzz: store('toep_buzz') !== '0' };
+  let audioCtx = null;
+
+  function audio() {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      if (!AC) return null;
+      audioCtx = new AC();
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    return audioCtx;
+  }
+  // Telefoons laten pas geluid toe na een tik; dan zetten we het alvast klaar.
+  document.addEventListener('pointerdown', () => { if (prefs.sound) audio(); }, { once: true });
+
+  function tone(ctx, freq, at, dur, type = 'sine', vol = 0.18) {
+    const t = ctx.currentTime + at;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, t);
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(vol, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + dur + 0.02);
+  }
+
+  function noise(ctx, at, dur, vol, cutoff) {
+    const t = ctx.currentTime + at;
+    const buf = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * dur), ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / data.length) ** 2;
+    const src = ctx.createBufferSource();
+    const filter = ctx.createBiquadFilter();
+    const gain = ctx.createGain();
+    src.buffer = buf;
+    filter.type = 'lowpass';
+    filter.frequency.value = cutoff;
+    gain.gain.value = vol;
+    src.connect(filter).connect(gain).connect(ctx.destination);
+    src.start(t);
+  }
+
+  // Klop op de tafel: een doffe dreun met een tikje hout erbij.
+  function thump(ctx, at) {
+    const t = ctx.currentTime + at;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.frequency.setValueAtTime(140, t);
+    osc.frequency.exponentialRampToValueAtTime(55, t + 0.12);
+    gain.gain.setValueAtTime(0.5, t);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + 0.18);
+    osc.connect(gain).connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + 0.2);
+    noise(ctx, at, 0.05, 0.35, 900);
+  }
+
+  const SOUNDS = {
+    card: ctx => noise(ctx, 0, 0.07, 0.4, 3200),
+    deal: ctx => [0, 0.07, 0.14, 0.21].forEach(at => noise(ctx, at, 0.05, 0.25, 2600)),
+    knock: ctx => { thump(ctx, 0); thump(ctx, 0.17); },
+    turn: ctx => { tone(ctx, 660, 0, 0.12, 'triangle', 0.12); tone(ctx, 880, 0.09, 0.16, 'triangle', 0.1); },
+    pop: ctx => tone(ctx, 990, 0, 0.09, 'sine', 0.1),
+    win: ctx => [523, 659, 784, 1047].forEach((f, i) => tone(ctx, f, i * 0.1, 0.25, 'triangle', 0.15)),
+    champion: ctx => [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => tone(ctx, f, i * 0.12, 0.3, 'triangle', 0.15)),
+    lose: ctx => { tone(ctx, 392, 0, 0.22, 'sine', 0.12); tone(ctx, 311, 0.2, 0.35, 'sine', 0.12); },
+  };
+
+  function play(name) {
+    if (!prefs.sound || document.hidden) return;
+    const ctx = audio();
+    if (!ctx) return;
+    try { SOUNDS[name](ctx); } catch (e) { /* geluid is bijzaak */ }
+  }
+
+  function buzz(pattern) {
+    if (!prefs.buzz || !navigator.vibrate) return;
+    if (navigator.userActivation && !navigator.userActivation.hasBeenActive) return; // pas na de eerste tik
+    try { navigator.vibrate(pattern); } catch (e) { /* niet ondersteund */ }
+  }
+
+  function renderPrefs() {
+    $('#prefSound').setAttribute('aria-pressed', String(prefs.sound));
+    $('#prefBuzz').setAttribute('aria-pressed', String(prefs.buzz));
+  }
+
+  // ---------- reacties ----------
+
+  const REACTIONS = ['🍺', '👏', '😏', '😱', '😂', '🔥'];
+
+  function handleReactions() {
+    const list = S.reactions || [];
+    const last = list.length ? list[list.length - 1].id : 0;
+    if (seenReact < 0 || last < seenReact) { seenReact = last; return; }
+    for (const r of list) {
+      if (r.id <= seenReact) continue;
+      seenReact = r.id;
+      if (S.phase !== 'lobby') showBubble(r.seat, r.emoji);
+    }
+  }
+
+  // Emoji die even boven iemands avatar opstijgt.
+  function showBubble(seat, emoji) {
+    const anchor = seat === S.me ? $('#mebar .av') : document.querySelector(`.opp[data-seat="${seat}"] .av`);
+    if (!anchor) return;
+    const r = anchor.getBoundingClientRect();
+    const b = document.createElement('div');
+    b.className = 'bubble';
+    b.textContent = emoji;
+    b.style.left = `${r.left + r.width / 2}px`;
+    b.style.top = `${r.top}px`;
+    $('#bubbles').append(b);
+    setTimeout(() => b.remove(), 2400);
+    play('pop');
+  }
+
+  function toggleReactTray(show) {
+    const tray = $('#reactTray');
+    tray.hidden = show === undefined ? !tray.hidden : !show;
+    if (!tray.hidden && !tray.children.length) {
+      tray.innerHTML = REACTIONS.map(e => `<button data-act="react" data-emoji="${e}" aria-label="Reageer met ${e}">${e}</button>`).join('');
+    }
+  }
 
   // ---------- meldingen ----------
 
@@ -929,10 +1147,13 @@
       if (l.id <= seenLog) continue;
       seenLog = l.id;
       if (l.kind === 'quiet' || S.phase === 'lobby') continue;
-      if (l.kind === 'toep') splash(l.amount === 2 ? 'DUBBEL!' : 'TOEP!', l.text);
-      else if (l.kind === 'blind') splash(`BLIND ${l.amount}!`, l.text);
-      else if (l.kind === 'final') splash('FINALE!', l.text);
-      else if (l.kind === 'scherp') splash('OP SCHERP!', l.text);
+      if (l.kind === 'toep') {
+        splash(l.amount === 2 ? 'DUBBEL!' : 'TOEP!', l.text);
+        play('knock');
+        buzz([70, 50, 70]);
+      } else if (l.kind === 'blind') { splash(`BLIND ${l.amount}!`, l.text); play('knock'); }
+      else if (l.kind === 'final') { splash('FINALE!', l.text); play('knock'); }
+      else if (l.kind === 'scherp') { splash('OP SCHERP!', l.text); play('knock'); }
       else if ((l.kind === 'round' && S.phase === 'roundEnd') || (l.kind === 'game' && S.phase === 'gameEnd')) continue; // staat al in het overzicht
       else toast(l.text, l.kind, l.cards || null);
     }
@@ -941,8 +1162,9 @@
   function notify() {
     const p = meP();
     const needs = !!(p && p.acting) && S.phase !== 'wash' && S.phase !== 'blind';
-    if (needs && !prevNeeds && navigator.vibrate) {
-      try { navigator.vibrate(S.phase === 'toep' || S.phase === 'washCheck' ? [90, 60, 90] : 60); } catch (e) { /* niet ondersteund */ }
+    if (needs && !prevNeeds) {
+      buzz(S.phase === 'toep' || S.phase === 'washCheck' ? [90, 60, 90] : 60);
+      if (S.phase !== 'toep') play('turn'); // bij een toep klinkt de klop al
     }
     prevNeeds = needs;
     document.title = needs ? '● Jouw beurt — Toepen' : 'Toepen';
@@ -988,6 +1210,18 @@
       case 'scherp': return act('scherp', { go: d.go === '1' });
       case 'botLevel': return act('botLevel', { seat: Number(d.seat) });
       case 'theme': return act('theme', { theme: d.key });
+      case 'reactMenu': return toggleReactTray();
+      case 'react': toggleReactTray(false); return act('react', { emoji: d.emoji });
+      case 'toggleSound':
+        prefs.sound = !prefs.sound;
+        store('toep_sound', prefs.sound ? '1' : '0');
+        renderPrefs();
+        return play('pop');
+      case 'toggleBuzz':
+        prefs.buzz = !prefs.buzz;
+        store('toep_buzz', prefs.buzz ? '1' : '0');
+        renderPrefs();
+        return buzz(80);
       case 'wash': return act('wash', { claim: d.claim === '1' });
       case 'check': return act('washResponse', { check: true });
       case 'believe': return act('washResponse', { check: false });
@@ -1037,6 +1271,7 @@
   }
 
   document.addEventListener('click', e => {
+    if (!e.target.closest('#reactTray, .react-btn')) $('#reactTray').hidden = true;
     const a = e.target.closest('[data-act]');
     if (a) {
       if (a.disabled) return;
@@ -1064,7 +1299,13 @@
     e.target.value = e.target.value.toUpperCase().replace(/[^A-Z]/g, '').slice(0, 4);
   });
 
+  // Installeerbaar als app en sneller opstarten (alleen via https, dus niet bij lokaal testen).
+  if ('serviceWorker' in navigator && location.protocol === 'https:') {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* geen probleem: dan gewoon zonder */ });
+  }
+
   applyTheme(store('toep_theme')); // laatste stijl al tonen op het startscherm
+  renderPrefs();
   $('#nameInput').value = store('toep_name') || '';
   $('#homeName').value = store('toep_name') || '';
   window.addEventListener('load', () => { if (S) renderInvite(); });

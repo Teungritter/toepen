@@ -11,7 +11,9 @@ Multiplayer toepen voor 2 tot 4 spelers op je telefoon. Eén telefoon maakt een 
 
 De host-telefoon draait het spel: houd de app open. Herlaadt iemand de pagina (ook de host), dan gaat het spel gewoon verder.
 
-Tip: kies in Safari/Chrome "Zet op beginscherm", dan draait het spel schermvullend als een app.
+Tip: kies in Safari/Chrome "Zet op beginscherm" (of "App installeren"), dan draait het spel schermvullend als een app en start het direct op.
+
+Extra's: geluid en trillen (aan/uit in het ☰-menu), snelle reacties via de 😀-knop, statistieken en titels op het eindscherm, en de host kiest de stijl.
 
 ## Spelregels
 
@@ -46,4 +48,7 @@ Bij een update: stap 2 opnieuw (bestaande bestanden worden overschreven).
 
 - `game.js`: alle spelregels, het spelverloop en de bots. Draait op de host-telefoon.
 - `app.js`: de interface en de verbinding tussen de telefoons (PeerJS).
-- `index.html`, `style.css`, `icon.svg`, `manifest.webmanifest`: de pagina en de stijl.
+- `index.html`, `style.css`: de pagina en de stijlen.
+- `sw.js`, `manifest.webmanifest`, `icon-*.png`, `icon.svg`: installeerbare app (PWA) en iconen.
+- `vendor/`: PeerJS 1.5.4 en qrcodejs 1.0.0, lokaal meegeleverd.
+- `fonts/`: Fredoka en Nunito (SIL Open Font License).
