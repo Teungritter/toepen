@@ -34,7 +34,10 @@ Zie het ☰-menu in het spel. Kort:
 
 **Kroegregels** (los aan/uit te zetten): Was, Doorgeven, Dubbel toepen, Boerenslag, Comeback.
 
-**Bots**: Makkelijk (willekeurig), Gemiddeld (vuistregels), Moeilijk (rekent kansen uit met wat hij kan weten) en God (kijkt stiekem in ieders kaarten).
+**Bots**: Makkelijk (willekeurig), Gemiddeld (vuistregels), Moeilijk en God.
+- Moeilijk rekent per zet 150 mogelijke kaartverdelingen door met alleen wat hij kan weten. Hij blufft, en past zich aan: toepers die vaak eerlijk toepen neemt hij serieus, en tegen spelers die snel passen blufft hij meer.
+- God kijkt stiekem in ieders kaarten en blufft alleen als hij weet dat de anderen passen.
+- Afgesteld met ruim 25.000 gesimuleerde potjes. Tegen drie Gemiddeld-bots wint Moeilijk 57% en God 97% van de potjes (eerlijk zou 25% zijn).
 
 Gewonnen potjes worden bijgehouden zolang je aan tafel blijft (🏆 in de lobby en in het menu).
 

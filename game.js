@@ -17,6 +17,15 @@
   const THEMES = ['cafe', 'nacht'];
   const REACTIONS = ['🍺', '👏', '😏', '😱', '😂', '🔥'];
   const AVATAR_COUNT = 24;
+
+  // Instellingen van de slimme bots, afgesteld met simulaties (zie README).
+  const BOT_STRATEGY = {
+    // Moeilijk past zich aan: leest de toeps van wie vaak eerlijk toept en blufft meer
+    // tegen spelers die snel passen.
+    moeilijk: { samples: 150, adapt: true, toep: 0.6, bluff: 0.25, read: 0.15, noise: 0.1, deathCaution: 0.55, double: 0.8, blind: 0.03, blindAmount: 2, blindRoom: 6 },
+    // God ziet alle kaarten: geen gokwerk, en bluft alleen als hij weet dat het lukt.
+    god: { samples: 200, toep: 0.55, bluff: 0, read: 0, noise: 0, deathCaution: 0.55, double: 0.8, blind: 0, blindAmount: 2, blindRoom: 6 },
+  };
   const LOOKS = {
     back: ['rood', 'blauw', 'oranje', 'ruit', 'goud', 'regenboog'],
     ring: ['geen', 'ijs', 'goud', 'vuur'],
@@ -117,7 +126,7 @@
 
   // Statistieken per potje, voor het eindscherm.
   function newStats() {
-    return { rounds: 0, toeps: 0, toepWins: 0, folds: 0, blinds: 0, bigPot: 0 };
+    return { rounds: 0, toeps: 0, toepWins: 0, folds: 0, blinds: 0, bigPot: 0, faced: 0, toepFolds: 0 };
   }
 
   function resetRound(p) {
@@ -374,13 +383,13 @@
       const me = { ...p, level: 'moeilijk' };
       let advice = null;
       if (this.phase === 'play' && this.turn === p.seat) {
-        const [card, chance] = this.botBestCard(me, 80);
+        const [card, chance] = this.botBestCard(me, 250);
         advice = { type: 'play', card, chance, toep: this.canToep(p) && chance > 0.6 };
       } else if (this.phase === 'toep' && t.pending[0] === p.seat) {
-        const prev = t.prev + p.extra, next = prev + t.amount, chance = this.botWinChance(me, 80);
+        const prev = t.prev + p.extra, next = prev + t.amount, chance = this.botWinChance(me, 250);
         advice = { type: 'toep', chance, go: chance > 1 - prev / next || p.points + prev >= this.settings.maxPoints };
       } else if (this.phase === 'scherp' && sc.pending.includes(p.seat)) {
-        const chance = this.botWinChance(me, 80);
+        const chance = this.botWinChance(me, 250);
         advice = { type: 'scherp', chance, go: chance > 0.5 };
       }
       p.adviceKey = key;
@@ -764,6 +773,8 @@
       if (t.pending[0] !== p.seat) fail(`Eerst kiest ${this.seats[t.pending[0]].name}.`);
       t.pending.splice(t.pending.indexOf(p.seat), 1);
       t.responses[p.seat] = go;
+      p.stats.faced = (p.stats.faced || 0) + 1;
+      if (!go) p.stats.toepFolds = (p.stats.toepFolds || 0) + 1;
       if (go) {
         this.log(`${p.name} gaat mee`, 'quiet');
       } else {
@@ -964,11 +975,22 @@
           if (rollout(h, trick, p.seat, active, folded, this.trickNo, this.tricksTotal, c) === p.seat) score[c]++;
         }
       }
-      const best = legal.reduce((b, c) => (score[c] > score[b] || (score[c] === score[b] && valOf(c) < valOf(b)) ? c : b));
-      return [best, score[best] / Math.max(1, samples.length)];
+      // Kaarten die binnen de meetruis even goed scoren, gelden als even goed. Speel dan
+      // de laagste: hoge kaarten bewaar je voor de laatste slag, de enige die telt.
+      const ns = Math.max(1, samples.length);
+      const top = Math.max(...legal.map(c => score[c]));
+      const q = top / ns;
+      const margin = Math.max(1, 1.5 * Math.sqrt(ns * q * (1 - q)));
+      const near = legal.filter(c => score[c] >= top - margin);
+      const best = near.reduce((lo, c) => (valOf(c) < valOf(lo) ? c : lo));
+      return [best, score[best] / ns];
     }
 
-    botSampleCount(p) { return p.level === 'god' ? 80 : 50; }
+    // Strategie van de slimme bots (Moeilijk en God). De getallen zijn met
+    // simulaties afgesteld; p.strat kan ze in een simulatie overschrijven.
+    strat(p) { return p.strat || BOT_STRATEGY[p.level] || BOT_STRATEGY.moeilijk; }
+
+    botSampleCount(p) { return this.strat(p).samples; }
 
     // Meegaan (verlies kost `next`) of weggaan (kost zeker `prev`)?
     botGo(p, prev, next) {
@@ -980,11 +1002,52 @@
         if (p.points + next >= mx) return s >= 7.5;
         return s >= 6 + (next - 2) * 0.5 || Math.random() < 0.15;
       }
-      const w = this.botWinChance(p, this.botSampleCount(p));
+      const S = this.strat(p);
+      let w = this.botWinChance(p, this.botSampleCount(p));
+      // Wie toept heeft vaak een goede hand (maar kan ook bluffen): iets voorzichtiger.
+      if (this.phase === 'toep' && p.level !== 'god') w *= 1 - this.readFactor(p, this.seats[this.toep.by]);
       let need = 1 - prev / next;
-      if (p.points + next >= mx) need = Math.max(need, 0.55);
-      if (p.level === 'moeilijk') need += (Math.random() - 0.5) * 0.14;
+      if (p.points + next >= mx) need = Math.max(need, S.deathCaution);
+      need += (Math.random() - 0.5) * S.noise;
       return w > need;
+    }
+
+    // Hoe voorzichtig je wordt van een toep van q. Een adaptieve bot kijkt hoe vaak q
+    // zijn toeps echt wint: eerlijke toepers neem je serieus, bluffers minder.
+    readFactor(p, q) {
+      const S = this.strat(p);
+      if (!S.adapt || !q || !q.stats) return S.read;
+      const honest = (q.stats.toepWins + 1.3) / (q.stats.toeps + 2); // begint rond 65%
+      return Math.min(0.45, Math.max(0, (honest - 0.4) * 1.2));
+    }
+
+    // Hoe vaak je blufft. Een adaptieve bot blufft meer als de anderen snel passen.
+    bluffRate(p) {
+      const S = this.strat(p);
+      if (!S.adapt) return S.bluff;
+      const others = this.active().filter(q => q !== p && q.stats);
+      if (!others.length) return 0;
+      const fold = others.reduce((sum, q) => sum + (q.stats.toepFolds + 0.5) / (q.stats.faced + 2), 0) / others.length;
+      return Math.min(0.5, Math.max(0, (fold - 0.15) * S.bluff * 4));
+    }
+
+    // Toepen met een goede hand, of bluffen met een slechte.
+    botWantsToep(p, w) {
+      const S = this.strat(p);
+      if (w > S.toep) return true;
+      if (p.level === 'god') return this.godBluffWorks(p);
+      return Math.random() < this.bluffRate(p) * (1 - w);
+    }
+
+    // God ziet alle kaarten en weet dus of de anderen passen als hij toept.
+    godBluffWorks(p) {
+      const others = this.active().filter(q => q !== p);
+      return others.length > 0 && others.every(q => {
+        const prev = this.stake + q.extra, next = prev + 1;
+        if (q.points + prev >= this.settings.maxPoints) return false; // die gaat toch mee
+        const asThem = { ...q, level: 'moeilijk' }; // zoals zij hun eigen kansen zien
+        return this.botWinChance(asThem, 40) < 1 - prev / next - 0.08;
+      });
     }
 
     botBlindAmount(p) {
@@ -994,7 +1057,11 @@
         const w = this.botWinChance(p, 80);
         return w > 0.85 ? 4 : w > 0.72 ? 3 : w > 0.6 ? 2 : 0;
       }
-      const chance = { makkelijk: 0.06, gemiddeld: 0.03, moeilijk: 0.03 }[p.level];
+      if (p.level === 'moeilijk') {
+        const S = this.strat(p);
+        return room > S.blindRoom && Math.random() < S.blind ? S.blindAmount : 0;
+      }
+      const chance = { makkelijk: 0.06, gemiddeld: 0.03 }[p.level];
       if (room > 6 && Math.random() < chance) return p.level === 'makkelijk' ? choice(BLIND_AMOUNTS) : 2;
       return 0;
     }
@@ -1044,10 +1111,8 @@
         return this.doPlay(p, minBy(this.legalCards(p), valOf));
       }
       const [card, w] = this.botBestCard(p, this.botSampleCount(p));
-      if (this.canToep(p) && this.stake < 6) {
-        const threshold = lvl === 'god' ? 0.55 : 0.6;
-        const bluff = lvl === 'moeilijk' && this.trickNo <= 2 && Math.random() < 0.04;
-        if (w > threshold || bluff) return this.doToep(p, doubleOk && w > 0.8 ? 2 : 1);
+      if (this.canToep(p) && this.stake < 6 && this.botWantsToep(p, w)) {
+        return this.doToep(p, doubleOk && w > this.strat(p).double ? 2 : 1);
       }
       return this.doPlay(p, card);
     }
@@ -1102,5 +1167,5 @@
     }
   }
 
-  root.Toepen = { Table, GameError, LEVELS, MAX_BLINDS, THEMES, REACTIONS };
+  root.Toepen = { Table, GameError, LEVELS, MAX_BLINDS, THEMES, REACTIONS, BOT_STRATEGY };
 })(typeof window !== 'undefined' ? window : globalThis);
