@@ -29,6 +29,7 @@ Zie het ☰-menu in het spel. Kort:
 - Af bij 15 strafpunten (10 kan ook); je eindigt nooit boven de 15. Laatste overlevende wint.
 - Op scherp: wie op 14 staat moet genomen worden en mag beginnen. Iedereen kijkt; mee = 2 punten, weg = 1. Geen blind.
 - Wie op 14 staat kan niet toepen en er kan niet tegen hem getoept worden. Spelers die niet op 14 staan kunnen wel tegen elkaar toepen; wie op 14 staat gaat dan automatisch mee (hooguit tot 15).
+- Alleen wie in zijn eentje de meeste punten heeft, mag blind spelen. Staan er twee of meer gelijk bovenaan, dan niemand.
 - Blind kan nooit boven de 15 uitkomen: op 13 hooguit 2, op 12 hooguit 3.
 - Finale: staan alle overgebleven spelers op 14, dan 8 kaarten elk, zonder toepen.
 

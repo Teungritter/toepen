@@ -51,6 +51,7 @@
   let prevStake = 0;
   let overlayKey = '';
   let roundDeadline = 0;
+  let blindDeadline = 0;
   let splashTimer = 0;
   let qrUrl = '';
   let sending = false;
@@ -72,6 +73,7 @@
 
   function setState(view) {
     S = view;
+    if (S.phase === 'blind') blindDeadline = Date.now() + (S.blindIn || 0);
     $('#conn').hidden = true;
     $('#connText').textContent = 'Verbinding kwijt… opnieuw verbinden';
     render();
@@ -781,20 +783,20 @@
     const extra = S.myExtra || 0;
     switch (S.phase) {
       case 'blind': {
-        if (S.blindDecision !== null) return wait('Wachten tot iedereen gekozen heeft');
+        if (S.blindDecision !== null) return wait('Wie de meeste punten heeft, kiest of hij blind speelt');
         if (blindPick) {
           const btns = [2, 3, 4].filter(n => n <= (S.blindMax || 4)).map(n => `<button class="btn toep" data-act="blind" data-amount="${n}">${n}</button>`).join('');
           return {
             tone: 'turn',
-            html: `<div class="pt">Blind voor hoeveel punten?<small>Nog ${S.blindsLeft}× blind dit potje.${S.blindMax < 4 ? ` Op ${mp.points} punten kan hooguit ${S.blindMax}.` : ''}</small></div>` +
+            html: `<div class="pt">Blind voor hoeveel punten? <span class="bcd"></span><small>Nog ${S.blindsLeft}× blind dit potje.${S.blindMax < 4 ? ` Op ${mp.points} punten kan hooguit ${S.blindMax}.` : ''}</small></div>` +
               `<div class="pb">${btns}<button class="btn ghost" data-act="blindBack">Terug</button></div>`,
           };
         }
         return {
           tone: 'turn',
-          html: `<div class="pt">Kijken of blind?<small>Nog niemand heeft zijn kaarten gezien.</small></div>` +
+          html: `<div class="pt">Kijken of blind?<small>Nog niemand heeft zijn kaarten gezien. Kies je niet op tijd, dan kijk je.</small></div>` +
             `<div class="pb"><button class="btn toep" data-act="blindPick">Blind</button>` +
-            `<button class="btn primary" data-act="blind" data-amount="0">Kijken</button></div>`,
+            `<button class="btn primary" data-act="blind" data-amount="0">Kijken <span class="bcd"></span></button></div>`,
         };
       }
       case 'blindResp': {
@@ -1115,6 +1117,9 @@
   }
 
   function tickCountdown() {
+    // Aftellen voor de blindkeuze.
+    const bs = Math.max(0, Math.ceil((blindDeadline - Date.now()) / 1000));
+    for (const b of document.querySelectorAll('.bcd')) b.textContent = `(${bs})`;
     const el = document.getElementById('cd');
     if (!el) return;
     const s = Math.max(0, Math.ceil((roundDeadline - Date.now()) / 1000));
@@ -1302,32 +1307,52 @@
   // ---------- muntjes en shop ----------
   // Zonder account: alles staat op deze telefoon (localStorage).
 
+  // Zeldzaamheid bepaalt de prijs en hoe vet het eruitziet.
+  const TIERS = { gewoon: 'Gewoon', zeldzaam: 'Zeldzaam', episch: 'Episch', legendarisch: 'Legendarisch' };
   const SHOP = [
-    { cat: 'back', title: 'Kaartrug', note: 'Zien de anderen ook', items: [
-      { id: 'rood', name: 'Klassiek rood', price: 0 },
-      { id: 'blauw', name: 'Delfts blauw', price: 150 },
-      { id: 'oranje', name: 'Oranje', price: 150 },
-      { id: 'ruit', name: 'Ruitjes', price: 200 },
-      { id: 'goud', name: 'Goud', price: 300 },
-      { id: 'regenboog', name: 'Regenboog', price: 500 },
+    { cat: 'back', title: 'Kaarten', note: 'Je kaartrug zien de anderen ook.', items: [
+      { id: 'rood', name: 'Klassiek rood', price: 0, tier: 'gewoon', desc: 'De vertrouwde kroegkaart.' },
+      { id: 'blauw', name: 'Delfts blauw', price: 150, tier: 'gewoon', desc: 'Strak blauw gestreept.' },
+      { id: 'oranje', name: 'Oranje', price: 150, tier: 'gewoon', desc: 'Voor de echte supporter.' },
+      { id: 'ruit', name: 'Ruitjes', price: 200, tier: 'gewoon', desc: 'Zwart-wit geblokt.' },
+      { id: 'goud', name: 'Goud', price: 400, tier: 'zeldzaam', desc: 'Gouden strepen met een glans die over de kaart trekt.' },
+      { id: 'sterren', name: 'Sterrenhemel', price: 450, tier: 'zeldzaam', desc: 'Twinkelende sterren op nachtblauw.' },
+      { id: 'regenboog', name: 'Regenboog', price: 500, tier: 'zeldzaam', desc: 'Kleuren die blijven stromen.' },
+      { id: 'smaragd', name: 'Smaragd', price: 900, tier: 'episch', desc: 'Diepgroen met gouden ruitjes en een glinstering.' },
+      { id: 'holo', name: 'Holografisch', price: 1200, tier: 'episch', desc: 'Folie die steeds van kleur verschiet, zoals een zeldzame verzamelkaart.' },
+      { id: 'vlam', name: 'Vuurdraak', price: 2500, tier: 'legendarisch', desc: 'Laaiende vlammen en opstijgende vonken.' },
+      { id: 'kosmos', name: 'Kosmos', price: 3500, tier: 'legendarisch', desc: 'Een draaiend sterrenstelsel op je kaarten.' },
+      { id: 'koning', name: 'Koningskaart', price: 5000, tier: 'legendarisch', desc: 'Massief goud met kroon. Voor de echte kroegkoning.' },
     ] },
-    { cat: 'ring', title: 'Rand om je avatar', note: 'Zien de anderen ook', items: [
-      { id: 'geen', name: 'Geen', price: 0 },
-      { id: 'ijs', name: 'IJs', price: 200 },
-      { id: 'goud', name: 'Goud', price: 250 },
-      { id: 'vuur', name: 'Vuur', price: 300 },
+    { cat: 'ring', title: 'Randen', note: 'De rand om je avatar zien de anderen ook.', items: [
+      { id: 'geen', name: 'Geen', price: 0, tier: 'gewoon', desc: 'Gewoon je gezicht.' },
+      { id: 'ijs', name: 'IJs', price: 200, tier: 'gewoon', desc: 'Koel en strak.' },
+      { id: 'goud', name: 'Goud', price: 250, tier: 'gewoon', desc: 'Een gouden lijst om je hoofd.' },
+      { id: 'vuur', name: 'Vuur', price: 400, tier: 'zeldzaam', desc: 'Een ring van vuur die rond blijft gaan.' },
+      { id: 'neon', name: 'Neon', price: 450, tier: 'zeldzaam', desc: 'Roze en blauw, als een kroegreclame.' },
+      { id: 'regenboog', name: 'Regenboog', price: 1000, tier: 'episch', desc: 'Alle kleuren, steeds in beweging.' },
+      { id: 'bliksem', name: 'Bliksem', price: 1200, tier: 'episch', desc: 'Knetterende stroom rond je avatar.' },
+      { id: 'kroon', name: 'Kroon', price: 3000, tier: 'legendarisch', desc: 'Draaiend goud met een kroon erop.' },
+      { id: 'diamant', name: 'Diamant', price: 4000, tier: 'legendarisch', desc: 'Schitterend kristal met een fonkelende ster die rondcirkelt.' },
     ] },
-    { cat: 'felt', title: 'Tafelkleed', note: 'Alleen voor jou', items: [
-      { id: 'groen', name: 'Groen laken', price: 0 },
-      { id: 'blauw', name: 'Blauw laken', price: 150 },
-      { id: 'rood', name: 'Rood laken', price: 150 },
-      { id: 'paars', name: 'Paars laken', price: 200 },
-      { id: 'zwart', name: 'Zwart laken', price: 250 },
+    { cat: 'felt', title: 'Tafels', note: 'Je tafelkleed zie alleen jij.', items: [
+      { id: 'groen', name: 'Groen laken', price: 0, tier: 'gewoon', desc: 'Het klassieke biljartgroen.' },
+      { id: 'blauw', name: 'Blauw laken', price: 150, tier: 'gewoon', desc: 'Rustig blauw.' },
+      { id: 'rood', name: 'Rood laken', price: 150, tier: 'gewoon', desc: 'Warm rood.' },
+      { id: 'paars', name: 'Paars laken', price: 200, tier: 'gewoon', desc: 'Diep paars.' },
+      { id: 'zwart', name: 'Zwart laken', price: 250, tier: 'gewoon', desc: 'Stijlvol zwart.' },
+      { id: 'oceaan', name: 'Oceaan', price: 450, tier: 'zeldzaam', desc: 'Zonlicht dat over de bodem van de zee danst.' },
+      { id: 'casino', name: 'Casino', price: 500, tier: 'zeldzaam', desc: 'Rood fluweel met een gouden ruitpatroon.' },
+      { id: 'sterren', name: 'Sterrennacht', price: 1000, tier: 'episch', desc: 'Spelen onder een twinkelende sterrenhemel.' },
+      { id: 'aurora', name: 'Noorderlicht', price: 1200, tier: 'episch', desc: 'Golvend groen en paars licht boven de tafel.' },
+      { id: 'deco', name: 'Goudkoorts', price: 3000, tier: 'legendarisch', desc: 'Zwart fluweel met gouden art deco en een gloeiende rand.' },
     ] },
-    { cat: 'effect', title: 'Winst-effect', note: 'Alleen voor jou', items: [
-      { id: 'geen', name: 'Geen', price: 0 },
-      { id: 'confetti', name: 'Confetti', price: 300 },
-      { id: 'vuurwerk', name: 'Vuurwerk', price: 500 },
+    { cat: 'effect', title: 'Effecten', note: 'Je winst-effect zie alleen jij.', items: [
+      { id: 'geen', name: 'Geen', price: 0, tier: 'gewoon', desc: 'Winnen is al feest genoeg.' },
+      { id: 'confetti', name: 'Confetti', price: 300, tier: 'gewoon', desc: 'Een regen van gekleurde snippers.' },
+      { id: 'vuurwerk', name: 'Vuurwerk', price: 600, tier: 'zeldzaam', desc: 'Knallende pijlen boven de tafel.' },
+      { id: 'muntregen', name: 'Muntregen', price: 1200, tier: 'episch', desc: 'Het regent gouden munten.' },
+      { id: 'kroning', name: 'Kroning', price: 3000, tier: 'legendarisch', desc: 'Een gouden kroon daalt neer, met stralen, vonken en munten.' },
     ] },
   ];
   const START_COINS = 100;
@@ -1365,7 +1390,7 @@
   }
 
   function buy(cat, id) {
-    const item = SHOP.find(c => c.cat === cat).items.find(i => i.id === id);
+    const item = shopItem(cat, id);
     if (!item || wallet.owned[cat].includes(id)) return;
     if (wallet.coins < item.price) {
       toast(`Je hebt nog ${item.price - wallet.coins} muntjes te weinig.`, 'err');
@@ -1378,6 +1403,7 @@
     play('coin');
     toast(`${item.name} gekocht!`);
     afterLookChange();
+    unlockFx(item.tier);
   }
 
   function equip(cat, id) {
@@ -1407,52 +1433,105 @@
     send('look', { back: wallet.equip.back, ring: wallet.equip.ring, avatar: myAvatar() }).finally(() => { lookPending = false; });
   }
 
-  function previewHTML(cat, item) {
-    if (cat === 'back') return `<div class="card back b-${item.id}" style="--w:40px"></div>`;
-    if (cat === 'ring') return `<span class="av r-${item.id}">${avatarImg((S && meP()) || { name: store('toep_name') || '' })}</span>`;
-    if (cat === 'felt') return `<div class="felt-swatch f-${item.id}"></div>`;
-    return `<span class="fx-icon">${{ geen: '·', confetti: '🎉', vuurwerk: '🎆' }[item.id]}</span>`;
+  // Voorbeeld van een item: klein in de shop, groot als je het bekijkt.
+  function previewHTML(cat, item, big) {
+    if (cat === 'back') return `<div class="card back b-${item.id}" style="--w:${big ? 150 : 58}px"></div>`;
+    if (cat === 'ring') {
+      const n = big ? 110 : 52;
+      return `<span class="av r-${item.id}" style="width:${n}px;height:${n}px;font-size:${big ? 40 : 20}px"><img src="avatars/p${myAvatar()}.webp" alt=""></span>`;
+    }
+    if (cat === 'felt') return `<div class="felt-swatch f-${item.id}${big ? ' big' : ''}"></div>`;
+    const icon = { geen: '·', confetti: '🎉', vuurwerk: '🎆', muntregen: '💰', kroning: '👑' }[item.id];
+    return `<span class="fx-icon${big ? ' big' : ''}">${icon}</span>`;
+  }
+
+  let shopTab = 'back';
+  let shopInspect = null; // { cat, id } van het item dat je groot bekijkt
+
+  function shopItem(cat, id) { return SHOP.find(c => c.cat === cat).items.find(i => i.id === id); }
+
+  function itemState(cat, i) {
+    if (wallet.equip[cat] === i.id) return 'used';
+    return wallet.owned[cat].includes(i.id) ? 'owned' : 'locked';
+  }
+
+  function itemTile(cat, i) {
+    const st = itemState(cat, i);
+    const foot = st === 'used' ? '<span class="tag-used">✓ In gebruik</span>'
+      : st === 'owned' ? '<span class="tag-own">In bezit</span>'
+        : `<span class="price${wallet.coins < i.price ? ' short' : ''}"><i class="coin"></i>${i.price}</span>`;
+    return `<button class="shop-item t-${i.tier} ${st}" data-act="inspect" data-cat="${cat}" data-id="${i.id}">` +
+      `<span class="tier">${TIERS[i.tier]}</span><span class="prev">${previewHTML(cat, i, false)}</span><b>${i.name}</b>${foot}</button>`;
+  }
+
+  function inspectHTML() {
+    const { cat, id } = shopInspect;
+    const i = shopItem(cat, id);
+    const st = itemState(cat, i);
+    let action;
+    if (st === 'used') action = '<button class="btn big" disabled>✓ In gebruik</button>';
+    else if (st === 'owned') action = `<button class="btn primary big" data-act="equip" data-cat="${cat}" data-id="${id}">Gebruiken</button>`;
+    else if (wallet.coins < i.price) action = `<button class="btn big" disabled><i class="coin"></i>${i.price} · je mist er nog ${i.price - wallet.coins}</button>`;
+    else action = `<button class="btn primary big" data-act="buy" data-cat="${cat}" data-id="${id}">Kopen voor <i class="coin"></i>${i.price}</button>`;
+    const tryBtn = cat === 'effect' && id !== 'geen' ? `<button class="btn ghost" data-act="tryEffect" data-id="${id}">Probeer</button>` : '';
+    return `<div class="inspect t-${i.tier}" data-act="closeInspect"><div class="inspect-card" data-act="noop">` +
+      `<button class="iconbtn" data-act="closeInspect" aria-label="Sluiten">✕</button>` +
+      `<span class="tier">${TIERS[i.tier]}</span>` +
+      `<div class="inspect-stage"><div class="inspect-prev" id="tilt">${previewHTML(cat, i, true)}<i class="glare"></i></div></div>` +
+      `<h3>${i.name}</h3><p>${i.desc}</p><div class="inspect-btns">${action}${tryBtn}</div></div></div>`;
   }
 
   function renderShop() {
     const el = $('#shop');
     if (el.hidden) return;
-    const cats = SHOP.map(c => `<section class="shop-cat"><h3>${c.title} <small>${c.note}</small></h3><div class="shop-grid">${
-      c.items.map(i => {
-        const owned = wallet.owned[c.cat].includes(i.id);
-        const used = wallet.equip[c.cat] === i.id;
-        let btn;
-        if (used) btn = '<button class="btn mini-btn" disabled>In gebruik</button>';
-        else if (owned) btn = `<button class="btn mini-btn ghost" data-act="equip" data-cat="${c.cat}" data-id="${i.id}">Gebruiken</button>`;
-        else btn = `<button class="btn mini-btn primary" data-act="buy" data-cat="${c.cat}" data-id="${i.id}"><i class="coin"></i>${i.price}</button>`;
-        const tryBtn = c.cat === 'effect' && i.id !== 'geen' ? `<button class="link" data-act="tryEffect" data-id="${i.id}">Probeer</button>` : '';
-        return `<div class="shop-item ${used ? 'used' : ''}">${previewHTML(c.cat, i)}<b>${i.name}</b>${btn}${tryBtn}</div>`;
-      }).join('')}</div></section>`).join('');
-    el.innerHTML = `<div class="sheet shop-sheet"><div class="shop-head"><h2>Shop</h2><span class="coins"><i class="coin"></i>${wallet.coins}</span>` +
+    const cat = SHOP.find(c => c.cat === shopTab) || SHOP[0];
+    const tabs = SHOP.map(c => `<button class="shop-tab${c.cat === cat.cat ? ' on' : ''}" data-act="shopTab" data-cat="${c.cat}">${c.title}</button>`).join('');
+    el.innerHTML = `<div class="shop-sheet">` +
+      `<div class="shop-top"><h2>Shop</h2><div class="purse"><i class="coin"></i><b>${wallet.coins}</b></div>` +
       `<button class="iconbtn" data-act="closeShop" aria-label="Sluiten">✕</button></div>` +
-      `<p class="sub">Win een potje voor ${WIN_COINS} muntjes (${BOT_WIN_COINS} als je alleen van bots wint).</p>${cats}</div>`;
+      `<p class="shop-sub">Win een potje voor <b>${WIN_COINS}</b> muntjes (${BOT_WIN_COINS} als je alleen van bots wint).</p>` +
+      `<div class="shop-tabs">${tabs}</div><p class="shop-note">${cat.note}</p>` +
+      `<div class="shop-grid">${cat.items.map(i => itemTile(cat.cat, i)).join('')}</div></div>`;
+    // Apart van het shopscherm, anders scrolt het grote voorbeeld mee.
+    $('#inspect').innerHTML = shopInspect ? inspectHTML() : '';
   }
 
-  // Gespeelde slagen terugkijken: deze ronde, en de vorige ronde.
-  let historyPrev = false;
-  function renderHistory() {
-    const el = $('#history');
-    if (el.hidden || !S) return;
-    const cur = S.tricks || [], prev = S.prevTricks || [];
-    if (!cur.length && prev.length && !historyPrev && S.phase !== 'roundEnd') historyPrev = true;
-    const list = historyPrev ? prev : cur;
-    const tabs = `<div class="hist-tabs"><button class="btn mini-btn ${historyPrev ? 'ghost' : 'primary'}" data-act="historyTab" data-prev="0">Deze ronde</button>` +
-      `<button class="btn mini-btn ${historyPrev ? 'primary' : 'ghost'}" data-act="historyTab" data-prev="1"${prev.length ? '' : ' disabled'}>Vorige ronde</button></div>`;
-    const body = list.length ? [...list].reverse().map(t =>
-      `<section class="hist-trick"><h3>Slag ${t.no}<small>${esc(nameOf(t.winner))} pakt hem</small></h3><div class="hist-cards">${
-        t.cards.map(x => `<div class="hist-card${x.seat === t.winner ? ' win' : ''}">${cardHTML(x.card)}<span>${esc(nameOf(x.seat))}</span></div>`).join('')}</div></section>`).join('')
-      : '<p class="sub">Nog geen slagen gespeeld.</p>';
-    el.innerHTML = `<div class="sheet shop-sheet"><div class="shop-head"><h2>Gespeelde slagen</h2>` +
-      `<button class="iconbtn" data-act="closeHistory" aria-label="Sluiten">✕</button></div>${tabs}${body}</div>`;
+  // Groot voorbeeld kantelt mee met je vinger, zoals een echte verzamelkaart.
+  function tilt(e) {
+    const t = document.getElementById('tilt');
+    if (!t) return;
+    const r = t.getBoundingClientRect();
+    const x = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+    const y = Math.min(1, Math.max(0, (e.clientY - r.top) / r.height));
+    t.style.transform = `rotateY(${(x - 0.5) * 30}deg) rotateX(${(0.5 - y) * 30}deg)`;
+    t.style.setProperty('--gx', `${x * 100}%`);
+    t.style.setProperty('--gy', `${y * 100}%`);
+  }
+  document.addEventListener('pointermove', e => { if (e.target.closest && e.target.closest('.inspect-stage')) tilt(e); });
+  document.addEventListener('pointerleave', () => { const t = document.getElementById('tilt'); if (t) t.style.transform = ''; }, true);
+
+  // Ontgrendeld: stempel en vonken in de kleur van de zeldzaamheid.
+  function unlockFx(tier) {
+    const card = $('#inspect .inspect-card');
+    if (card) card.classList.add('unlock');
+    const color = { gewoon: '#e8e0cf', zeldzaam: '#3d9bff', episch: '#b45cff', legendarisch: '#ffb43a' }[tier];
+    const box = $('#bubbles');
+    const n = { gewoon: 18, zeldzaam: 28, episch: 40, legendarisch: 60 }[tier];
+    for (let i = 0; i < n; i++) {
+      const sp = document.createElement('i');
+      const ang = Math.random() * Math.PI * 2, dist = 60 + Math.random() * 140;
+      sp.className = 'spark';
+      sp.style.cssText = `left:50vw;top:42vh;background:${i % 3 ? color : '#fff'};--dx:${Math.cos(ang) * dist}px;--dy:${Math.sin(ang) * dist}px`;
+      box.append(sp);
+      setTimeout(() => sp.remove(), 1400);
+    }
+    setTimeout(() => play(tier === 'legendarisch' ? 'champion' : 'win'), 150);
+    if (tier === 'legendarisch') celebrate('muntregen');
   }
 
   function openShop() {
     closeMenu();
+    shopInspect = null;
     $('#shop').hidden = false;
     renderShop();
   }
@@ -1470,6 +1549,23 @@
           `animation-duration:${2 + Math.random() * 1.5}s;--rot:${Math.random() * 720 - 360}deg;--drift:${Math.random() * 120 - 60}px`;
         box.append(c);
         setTimeout(() => c.remove(), 4200);
+      }
+    } else if (kind === 'muntregen' || kind === 'kroning') {
+      const n = kind === 'kroning' ? 50 : 70;
+      for (let i = 0; i < n; i++) {
+        const c = document.createElement('i');
+        c.className = 'coin-drop';
+        c.style.cssText = `left:${Math.random() * 100}vw;animation-delay:${Math.random() * (kind === 'kroning' ? 1.2 : 0.8)}s,${Math.random()}s;` +
+          `animation-duration:${1.8 + Math.random() * 1.4}s,${0.5 + Math.random() * 0.5}s;--drift:${Math.random() * 80 - 40}px`;
+        box.append(c);
+        setTimeout(() => c.remove(), 4600);
+      }
+      if (kind === 'kroning') {
+        const k = document.createElement('div');
+        k.className = 'crowning';
+        k.innerHTML = '<i class="rays"></i><span class="crown">👑</span><b>KAMPIOEN!</b>';
+        box.append(k);
+        setTimeout(() => k.remove(), 3600);
       }
     } else if (kind === 'vuurwerk') {
       for (let b = 0; b < 4; b++) {
@@ -1610,10 +1706,25 @@
         historyPrev = d.prev === '1';
         return renderHistory();
       case 'closeHistory': $('#history').hidden = true; return undefined;
-      case 'closeShop': $('#shop').hidden = true; return undefined;
+      case 'closeShop':
+        $('#shop').hidden = true;
+        shopInspect = null;
+        $('#inspect').innerHTML = '';
+        return undefined;
       case 'buy': return buy(d.cat, d.id);
       case 'equip': return equip(d.cat, d.id);
       case 'tryEffect': return celebrate(d.id);
+      case 'shopTab':
+        shopTab = d.cat;
+        shopInspect = null;
+        return renderShop();
+      case 'inspect':
+        shopInspect = { cat: d.cat, id: d.id };
+        play('pop');
+        return renderShop();
+      case 'closeInspect':
+        shopInspect = null;
+        return renderShop();
       case 'toggleExpert':
         prefs.expert = !prefs.expert;
         store('toep_expert', prefs.expert ? '1' : '0');

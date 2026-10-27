@@ -27,8 +27,8 @@
     god: { samples: 200, toep: 0.55, bluff: 0, read: 0, noise: 0, deathCaution: 0.55, double: 0.8, blind: 0, blindAmount: 2, blindRoom: 6 },
   };
   const LOOKS = {
-    back: ['rood', 'blauw', 'oranje', 'ruit', 'goud', 'regenboog'],
-    ring: ['geen', 'ijs', 'goud', 'vuur'],
+    back: ['rood', 'blauw', 'oranje', 'ruit', 'goud', 'sterren', 'regenboog', 'smaragd', 'holo', 'vlam', 'kosmos', 'koning'],
+    ring: ['geen', 'ijs', 'goud', 'vuur', 'neon', 'regenboog', 'bliksem', 'kroon', 'diamant'],
   };
   const MAX_BLINDS = 2;        // per speler per potje
   const BLIND_AMOUNTS = [2, 3, 4];
@@ -36,6 +36,7 @@
   const SEEN_FOLD = 2;         // strafpunten als je na 'gezien' weggaat
 
   const ROUND_PAUSE = 10;      // seconden tussen rondes
+  const BLIND_TIME = 10;       // seconden om te kiezen of je blind speelt
   const BUY_IN_PAUSE = 30;     // seconden om te beslissen of je je inkoopt
   const TRICK_PAUSE = 1.4;     // seconden dat een volle slag blijft liggen
   const LAST_TRICK_PAUSE = 1.8;
@@ -149,7 +150,7 @@
   const STATE_KEYS = ['seats', 'settings', 'logs', 'logSeq', 'botSeq', 'gamesPlayed', 'phase', 'round', 'stake',
     'trick', 'trickNo', 'tricksTotal', 'turn', 'leader', 'lastToeper', 'toep', 'blind', 'scherp', 'final',
     'washCheck', 'washQueue', 'result', 'trickWinner', 'winner', 'nextRoundAt', 'deck', 'roundPlayed', 'voids',
-    'tricks', 'prevTricks', 'buyIn', 'buyIns', 'anyDied'];
+    'tricks', 'prevTricks', 'buyIn', 'buyIns', 'anyDied', 'blindDeadline'];
 
   class Table {
     constructor({ onChange = () => {}, isConnected = () => true, delay = 1, hostPid = null } = {}) {
@@ -243,6 +244,9 @@
       for (const p of this.seated()) if (!p.look) p.look = { back: 'rood', ring: 'geen' };
       // Lopende pauzes opnieuw starten.
       if (this.phase === 'trickEnd') this.after(TRICK_PAUSE, () => this.finishTrick());
+      if (this.phase === 'blind') {
+        this.after(Math.max(1, ((this.blindDeadline || 0) - Date.now()) / 1000 / this.delay), () => this.blindTimeout());
+      }
       if (this.phase === 'roundEnd') {
         const left = Math.max(1, (this.nextRoundAt - Date.now()) / 1000 / this.delay);
         if (this.buyIn) this.after(left, () => this.doBuyIn(this.seats[this.buyIn.seat], false));
@@ -493,12 +497,33 @@
         return;
       }
       // Normale ronde: eerst mag iedereen (zonder te kijken) blind spelen.
-      for (const p of alive) if (p.blindsUsed >= MAX_BLINDS || this.blindMax(p) < 2) p.blindDecision = 0;
+      for (const p of alive) if (p.blindsUsed >= MAX_BLINDS || this.blindMax(p) < 2 || !this.isBlindLeader(p)) p.blindDecision = 0;
       if (alive.every(p => p.blindDecision !== null)) this.afterBets();
-      else this.phase = 'blind';
+      else {
+        this.phase = 'blind';
+        this.blindDeadline = Date.now() + BLIND_TIME * 1000 * this.delay;
+        this.after(BLIND_TIME, () => this.blindTimeout());
+      }
     }
 
     // ----- blind -----
+
+    // Te lang getwijfeld over blind: dan kijk je gewoon.
+    blindTimeout() {
+      if (this.phase !== 'blind') return;
+      for (const p of this.alive().filter(q => q.blindDecision === null)) {
+        this.log(`${p.name} koos niet op tijd en kijkt`, 'quiet');
+        if (this.phase === 'blind') this.doBlind(p, 0);
+      }
+    }
+
+    // Alleen wie in zijn eentje de meeste punten heeft, mag blind spelen.
+    // Staan er twee of meer gelijk bovenaan, dan kan niemand blind.
+    isBlindLeader(p) {
+      const alive = this.alive();
+      const top = Math.max(...alive.map(q => q.points));
+      return p.points === top && alive.filter(q => q.points === top).length === 1;
+    }
 
     // Hoogste blind die nog kan: je kunt nooit boven de 15 eindigen.
     blindMax(p) { return Math.min(4, this.settings.maxPoints - p.points); }
@@ -510,6 +535,7 @@
       if (amount) {
         if (!BLIND_AMOUNTS.includes(amount)) fail('Blind kan voor 2, 3 of 4 punten.');
         if (p.blindsUsed >= MAX_BLINDS) fail(`Je hebt al ${MAX_BLINDS}× blind gespeeld dit potje.`);
+        if (!this.isBlindLeader(p)) fail('Alleen wie in zijn eentje de meeste punten heeft, mag blind spelen.');
         if (amount > this.blindMax(p)) fail(`Op ${p.points} punten kun je hooguit blind voor ${this.blindMax(p)}.`);
         p.blindsUsed++;
         p.stats.blinds++;
@@ -1232,6 +1258,7 @@
         washCheck: this.washCheck ? { seat: this.washCheck.seat, pending: this.washCheck.pending } : null,
         result: this.result,
         nextRoundIn: ph === 'roundEnd' ? Math.max(0, this.nextRoundAt - Date.now()) : 0,
+        blindIn: ph === 'blind' ? Math.max(0, (this.blindDeadline || 0) - Date.now()) : 0,
         winner: this.winner, log: this.logs.slice(-20), reactions: this.reactions,
       };
       if (me) {
