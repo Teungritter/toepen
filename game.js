@@ -493,12 +493,15 @@
         return;
       }
       // Normale ronde: eerst mag iedereen (zonder te kijken) blind spelen.
-      for (const p of alive) if (p.blindsUsed >= MAX_BLINDS) p.blindDecision = 0;
+      for (const p of alive) if (p.blindsUsed >= MAX_BLINDS || this.blindMax(p) < 2) p.blindDecision = 0;
       if (alive.every(p => p.blindDecision !== null)) this.afterBets();
       else this.phase = 'blind';
     }
 
     // ----- blind -----
+
+    // Hoogste blind die nog kan: je kunt nooit boven de 15 eindigen.
+    blindMax(p) { return Math.min(4, this.settings.maxPoints - p.points); }
 
     doBlind(p, amount) {
       if (this.phase !== 'blind') fail('Het moment voor blind is voorbij.');
@@ -507,6 +510,7 @@
       if (amount) {
         if (!BLIND_AMOUNTS.includes(amount)) fail('Blind kan voor 2, 3 of 4 punten.');
         if (p.blindsUsed >= MAX_BLINDS) fail(`Je hebt al ${MAX_BLINDS}× blind gespeeld dit potje.`);
+        if (amount > this.blindMax(p)) fail(`Op ${p.points} punten kun je hooguit blind voor ${this.blindMax(p)}.`);
         p.blindsUsed++;
         p.stats.blinds++;
         p.blindDecision = amount;
@@ -753,8 +757,11 @@
       if (this.final) return 'In de finale wordt niet getoept.';
       if (p.points >= this.edge) return `Op ${this.edge} punten mag je niet toepen.`;
       // Je kunt niet boven de 15 eindigen, dus tegen iemand op 14 heeft toepen geen zin.
-      const onEdge = this.active().find(q => q.points >= this.edge);
-      if (onEdge) return `${onEdge.name} staat op ${this.edge}: daar kun je niet tegen toepen.`;
+      // Staat er nog iemand anders niet op 14, dan kun je wel tegen die toepen.
+      const others = this.active().filter(q => q !== p);
+      if (others.length && others.every(q => q.points >= this.edge)) {
+        return `${others.map(q => q.name).join(' en ')} ${others.length > 1 ? 'staan' : 'staat'} op ${this.edge}: daar kun je niet tegen toepen.`;
+      }
       return null;
     }
 
@@ -779,12 +786,18 @@
       this.lastToeper = p.seat;
       p.toeped = true;
       p.stats.toeps++;
+      const others = this.orderFrom(p.seat).filter(s => s !== p.seat && !this.seats[s].dead && !this.seats[s].folded);
       this.toep = {
         by: p.seat, amount, prev, responses: {},
-        pending: this.orderFrom(p.seat).filter(s => s !== p.seat && !this.seats[s].dead && !this.seats[s].folded),
+        pending: others.filter(s => this.seats[s].points < this.edge),
       };
       this.phase = 'toep';
       this.log(`${p.name} ${amount === 2 ? 'toept dubbel' : 'toept'}! Inzet ${prev} → ${this.stake}`, 'toep', { seat: p.seat, amount });
+      // Wie op 14 staat, gaat automatisch mee (en eindigt hooguit op 15).
+      for (const s of others.filter(s => this.seats[s].points >= this.edge)) {
+        this.toep.responses[s] = true;
+        this.log(`${this.seats[s].name} staat op ${this.edge} en gaat automatisch mee`, 'quiet');
+      }
     }
 
     doToepResponse(p, go) {
@@ -1150,7 +1163,10 @@
     botAct(p) {
       const lvl = p.level;
       switch (this.phase) {
-        case 'blind': return this.doBlind(p, this.botBlindAmount(p));
+        case 'blind': {
+          const amount = Math.min(this.botBlindAmount(p), this.blindMax(p));
+          return this.doBlind(p, amount >= 2 ? amount : 0);
+        }
         case 'blindResp': return this.doBlindResp(p, this.botBlindResp(p));
         case 'scherp': return this.doScherp(p, this.botGo(p, 1, 2));
         case 'wash': return this.doWash(p, isWas(p.hand) && lvl !== 'makkelijk');
@@ -1230,7 +1246,7 @@
           canDouble: canToep && !!this.rules.double && !me.doubleUsed,
           myExtra: me.extra, blindsLeft: MAX_BLINDS - me.blindsUsed,
           myExpert: !!me.expert, advice: this.adviceFor(me),
-          blindDecision: me.blindDecision, blindResp: me.blindResp,
+          blindDecision: me.blindDecision, blindResp: me.blindResp, blindMax: this.blindMax(me),
           washDecision: me.washDecision, passCard: me.passCard, received: me.received,
           isWas: ph === 'wash' && isWas(me.hand),
           passTarget: passSeat >= 0 ? this.seats[passSeat].name : null,

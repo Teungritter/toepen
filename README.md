@@ -28,7 +28,8 @@ Zie het ☰-menu in het spel. Kort:
 - Blind: vóór iemand kijkt mag je blind spelen voor 2, 3 of 4 punten (max. 2× per speler per potje). Anderen kiezen om de beurt: meteen weg (1 punt, zonder te kijken), gezien (kijken, dan mee voor +1 of weg voor 2) of blind mee (= het bedrag). Blind telt als een toep: de blindspeler mag pas weer toepen nadat iemand anders heeft getoept.
 - Af bij 15 strafpunten (10 kan ook); je eindigt nooit boven de 15. Laatste overlevende wint.
 - Op scherp: wie op 14 staat moet genomen worden en mag beginnen. Iedereen kijkt; mee = 2 punten, weg = 1. Geen blind.
-- Zolang iemand op 14 meedoet, kan niemand toepen.
+- Wie op 14 staat kan niet toepen en er kan niet tegen hem getoept worden. Spelers die niet op 14 staan kunnen wel tegen elkaar toepen; wie op 14 staat gaat dan automatisch mee (hooguit tot 15).
+- Blind kan nooit boven de 15 uitkomen: op 13 hooguit 2, op 12 hooguit 3.
 - Finale: staan alle overgebleven spelers op 14, dan 8 kaarten elk, zonder toepen.
 
 **Spelvorm Finale**: één ronde, 8 kaarten per persoon, niet toepen. Laatste slag wint het potje.

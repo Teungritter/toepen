@@ -683,10 +683,10 @@
       case 'blind': {
         if (S.blindDecision !== null) return wait('Wachten tot iedereen gekozen heeft');
         if (blindPick) {
-          const btns = [2, 3, 4].map(n => `<button class="btn toep" data-act="blind" data-amount="${n}">${n}</button>`).join('');
+          const btns = [2, 3, 4].filter(n => n <= (S.blindMax || 4)).map(n => `<button class="btn toep" data-act="blind" data-amount="${n}">${n}</button>`).join('');
           return {
             tone: 'turn',
-            html: `<div class="pt">Blind voor hoeveel punten?<small>Nog ${S.blindsLeft}× blind dit potje.</small></div>` +
+            html: `<div class="pt">Blind voor hoeveel punten?<small>Nog ${S.blindsLeft}× blind dit potje.${S.blindMax < 4 ? ` Op ${mp.points} punten kan hooguit ${S.blindMax}.` : ''}</small></div>` +
               `<div class="pb">${btns}<button class="btn ghost" data-act="blindBack">Terug</button></div>`,
           };
         }
