@@ -22,7 +22,7 @@
 <div id="home" class="lobby" hidden>
   <header class="lobby-head">
     <h1 class="logo">Toepen<span>!</span></h1>
-    <p class="tag">Het kroegspel voor 2 tot 4 — gewoon op je telefoon</p>
+    <p class="tag">Het kroegspel voor 2 tot 4, gewoon op je telefoon</p>
   </header>
   <p id="homeBusy" class="panel busy" hidden></p>
   <form id="homeForm" class="panel home">
@@ -41,8 +41,9 @@
 <!-- LOBBY -->
 <div id="lobby" class="lobby" hidden>
   <header class="lobby-head">
+    <button class="iconbtn lobby-menu" data-act="openMenu" aria-label="Menu">☰</button>
     <h1 class="logo">Toepen<span>!</span></h1>
-    <p class="tag">Het kroegspel voor 2 tot 4 — gewoon op je telefoon</p>
+    <p class="tag">Het kroegspel voor 2 tot 4, gewoon op je telefoon</p>
   </header>
 
   <form id="joinForm" class="panel join" hidden>
@@ -92,15 +93,21 @@
 </div>
 
 <div id="overlay" class="overlay" hidden></div>
+<div id="shop" class="overlay shop-overlay" hidden></div>
 
 <!-- MENU / SPELREGELS -->
 <div id="drawer" class="drawer" aria-hidden="true">
   <div class="drawer-scrim" data-act="closeMenu"></div>
   <aside class="drawer-in">
     <div class="drawer-head">
-      <h2>Spelregels</h2>
+      <h2>Menu</h2>
       <button class="iconbtn" data-act="closeMenu" aria-label="Sluiten">✕</button>
     </div>
+    <div class="shop-row menu-shop">
+      <div><b id="drawerCoins" class="coins"><i class="coin"></i>0</b> muntjes</div>
+      <button class="btn primary" data-act="openShop">Shop</button>
+    </div>
+    <h3 class="menu-h">Instellingen</h3>
     <div class="prefs">
       <button id="prefSound" class="rule" data-act="toggleSound" aria-pressed="true">
         <span class="ri">🔊</span><span class="rt"><b>Geluid</b><span>Kaarten, toep-klop en winnen</span></span><span class="switch"></span>
@@ -109,6 +116,14 @@
         <span class="ri">📳</span><span class="rt"><b>Trillen</b><span>Als je aan de beurt bent of iemand toept</span></span><span class="switch"></span>
       </button>
     </div>
+    <div class="menu-sub">Stijl <small>(kiest de host)</small></div>
+    <div id="drawerTheme"></div>
+
+    <h3 class="menu-h">Kamer</h3>
+    <div id="drawerActions" class="drawer-actions"></div>
+
+    <details id="rulesBox" class="rules-box">
+      <summary><h3 class="menu-h">Spelregels</h3><span class="chev" aria-hidden="true">▾</span></summary>
     <div class="rules">
       <h3>Klassiek toepen</h3>
       <ul>
@@ -116,13 +131,14 @@
         <li>Van laag naar hoog: <b>B · V · H · A · 7 · 8 · 9 · 10</b>. De 10 is de hoogste!</li>
         <li><b>Kleur bekennen</b> is verplicht. De hoogste kaart in de gevraagde kleur wint de slag.</li>
         <li>Alleen de <b>laatste (4e) slag</b> telt: wie die wint, wint de ronde. De rest krijgt strafpunten ter hoogte van de inzet.</li>
-        <li><b>Toepen:</b> op je beurt verhoog je de inzet met 1. De anderen gaan <b>mee</b> of <b>passen</b>. Passen kost de inzet van vóór de toep.</li>
+        <li><b>Toepen:</b> op je beurt verhoog je de inzet met 1. De anderen kiezen om de beurt (met de klok mee) <b>mee</b> of <b>passen</b>. Passen kost de inzet van vóór de toep.</li>
+        <li>Wie de ronde wint, laat de speler <b>links van hem</b> de volgende ronde beginnen.</li>
         <li>Je mag niet twee keer achter elkaar toepen: eerst moet iemand anders toepen.</li>
-        <li><b>Blind:</b> vóór iemand zijn kaarten bekijkt, mag je blind spelen voor 2, 3 of 4 punten (max. 2× per potje). De anderen kiezen <b>blind mee</b> (voor het bedrag) of <b>gezien</b>: dan kijk je eerst en ga je mee voor 1 extra punt, of weg voor het bedrag.</li>
-        <li>Bij <b>15 strafpunten</b> ben je af (in de lobby kun je ook 10 kiezen). De laatste die overblijft, wint.</li>
-        <li><b>Op scherp:</b> staat iemand op 14, dan moet hij genomen worden. Iedereen bekijkt zijn kaarten: mee is voor 2 punten, weg kost 1.</li>
+        <li><b>Blind:</b> vóór iemand zijn kaarten bekijkt, mag je blind spelen voor 2, 3 of 4 punten (max. 2× per potje). De anderen kiezen om de beurt (met de klok mee) <b>blind mee</b> (voor het bedrag) of <b>gezien</b>: dan kijk je eerst en ga je mee voor 1 extra punt, of <b>weg voor 2</b>.</li>
+        <li>Bij <b>15 strafpunten</b> ben je af (onder Meer instellingen kun je ook 10 kiezen). Je kunt nooit boven de 15 eindigen. De laatste die overblijft, wint.</li>
+        <li><b>Op scherp:</b> staat iemand op 14, dan moet hij genomen worden. Hij mag beginnen. Iedereen bekijkt zijn kaarten: mee is voor 2 punten, weg kost 1. Er wordt die ronde niet blind gespeeld.</li>
         <li><b>Finale:</b> staan alle overgebleven spelers op 14, dan krijgt iedereen 8 kaarten. Niet toepen; de laatste slag beslist.</li>
-        <li>Op 14 mag je niet toepen. Zit je nog één tegen één met iemand op 14, dan toept niemand meer.</li>
+        <li>Zolang iemand op 14 nog meedoet, kan niemand toepen: tegen iemand op 14 heeft dat geen zin.</li>
       </ul>
       <h3>Spelvorm Finale</h3>
       <ul>
@@ -138,11 +154,12 @@
         <li>💪 <b>Comeback</b>: win je een ronde terwijl je op scherp staat (1 punt van af), dan gaat er 1 strafpunt af.</li>
       </ul>
     </div>
+    </details>
+
     <h3 class="log-title">Gewonnen potjes</h3>
     <ol id="winList" class="loglist wins-list"></ol>
     <h3 class="log-title">Wat er gebeurde</h3>
     <ol id="logList" class="loglist"></ol>
-    <div id="drawerActions" class="drawer-actions"></div>
   </aside>
 </div>
 

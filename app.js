@@ -10,9 +10,7 @@
   const POS = ['bottom', 'left', 'top', 'right'];
   const THEMES = [
     { key: 'cafe', name: 'Bruin café', swatch: ['#2a190d', '#1f7a4d', '#fdf7e7', '#ff7a1a'] },
-    { key: 'delft', name: 'Delfts blauw', swatch: ['#eef3fa', '#ffffff', '#1d3f8f', '#ff7a00'] },
     { key: 'nacht', name: 'Nachtkroeg', swatch: ['#14112b', '#221d47', '#21e6c1', '#ff3c8e'] },
-    { key: 'strak', name: 'Strak en licht', swatch: ['#f4f4f5', '#ffffff', '#111111', '#0090ff'] },
   ];
   const LEVEL_NAME ={ makkelijk: 'Makkelijk', gemiddeld: 'Gemiddeld', moeilijk: 'Moeilijk', god: 'God' };
   const HOUSE_RULES = [
@@ -47,6 +45,7 @@
   let selected = null;       // geselecteerde kaart in de hand
   let selectKey = '';
   let blindPick = false;     // stap 2 van blind: bedrag kiezen
+  let moreOpen = false;      // 'Meer instellingen' in de lobby uitgeklapt
   let seenLog = -1;
   let prevNeeds = false;
   let prevStake = 0;
@@ -400,6 +399,7 @@
     renderDrawer();
     handleLogs();
     handleReactions();
+    syncLook();
     notify();
   }
 
@@ -485,20 +485,25 @@
         ${seated && filled < 4 ? '<p class="note" style="margin:10px 0 0">Spelen kan met 2, 3 of 4. Vul eventueel aan met bots.</p>' : ''}
         ${seated && P.some(p => p && p.bot) ? '<p class="note" style="margin:10px 0 0">Tik op het niveau van een bot om het te wisselen.</p>' : ''}
       </section>
+      <section class="panel shop-row">
+        <div><b class="coins"><i class="coin"></i>${wallet.coins}</b> muntjes</div>
+        <button class="btn primary" data-act="openShop">Shop</button>
+      </section>
       <section class="panel">
-        <div class="panel-head"><h2>Spelvorm</h2><button class="link" data-act="openMenu">Spelregels</button></div>
+        <div class="panel-head"><h2>Spelvorm</h2><button class="link" data-act="openRules">Spelregels</button></div>
         <div class="seg">
           <button data-act="mode" data-mode="klassiek" aria-pressed="${st.mode === 'klassiek'}" ${dis}>Klassiek</button>
           <button data-act="mode" data-mode="kroeg" aria-pressed="${kroeg}" ${dis}>Kroeg</button>
           <button data-act="mode" data-mode="finale" aria-pressed="${finale}" ${dis}>Finale</button>
         </div>
-        ${maxRow}
         ${rules}
       </section>
-      <section class="panel">
-        <div class="panel-head"><h2>Stijl</h2></div>
+      <details class="panel more" id="moreSettings" ${moreOpen ? 'open' : ''}>
+        <summary><h2>Meer instellingen</h2><span class="chev" aria-hidden="true">▾</span></summary>
+        ${maxRow}
+        <h3 class="sub-h">Stijl</h3>
         ${themePicker()}
-      </section>
+      </details>
       <div class="lobby-actions">
         <button class="btn primary big" data-act="start" ${seated && filled >= 2 ? '' : 'disabled'}>${startLabel}</button>
         ${seated ? '<button class="btn ghost" data-act="leave">Opstaan</button>' : ''}
@@ -525,6 +530,7 @@
   // ----- spel -----
 
   function renderGame() {
+    $('.felt').className = 'felt' + (wallet.equip.felt !== 'groen' ? ` f-${wallet.equip.felt}` : '');
     renderHud();
     const map = layout();
     for (const pos of ['left', 'top', 'right']) {
@@ -568,6 +574,7 @@
       if (r === 'mee') return { t: 'Gezien mee', cls: 'ok' };
       if (r === 'weg') return { t: 'Weg', cls: 'grey' };
       if (r === 'seen') return { t: 'Kijkt…', cls: 'wait' };
+      if (S.blind.pending[0] !== s) return { t: 'Wacht', cls: 'grey' };
       return { t: 'Denkt…', cls: 'wait' };
     }
     if (ph === 'scherp') {
@@ -587,6 +594,7 @@
       if (S.toep.by === s) return { t: 'Toept!', cls: 'hot' };
       if (S.toep.responses[s] === true) return { t: 'Mee', cls: 'ok' };
       if (p.acting) return { t: 'Denkt…', cls: 'wait' };
+      if (S.toep.pending.includes(s)) return { t: 'Wacht', cls: 'grey' };
     }
     if (ph === 'play' && S.turn === s) return { t: 'Aan zet', cls: 'turn' };
     return null;
@@ -595,9 +603,10 @@
   function oppHTML(p, pos) {
     if (!p) return '';
     const chip = statusChip(p);
-    const backs = Array.from({ length: p.cards }, () => '<i class="mback"></i>').join('');
+    const look = p.look || { back: 'rood', ring: 'geen' };
+    const backs = Array.from({ length: p.cards }, () => `<i class="mback b-${look.back}"></i>`).join('');
     return `<div class="opp ${p.acting ? 'acting' : ''} ${p.folded ? 'folded' : ''} ${p.dead ? 'dead' : ''}" data-seat="${p.seat}">
-      <div class="av">${p.bot ? '🤖' : initial(p.name)}${p.online ? '' : '<span class="off" title="Offline">!</span>'}</div>
+      <div class="av r-${look.ring}">${p.bot ? '🤖' : initial(p.name)}${p.online ? '' : '<span class="off" title="Offline">!</span>'}</div>
       <div class="ob">
         <div class="nm">${esc(p.name)}</div>
         ${lives(p)}
@@ -613,7 +622,7 @@
     if (!S.trick.length && (S.phase === 'play' || S.phase === 'toep')) {
       const who = S.turn === S.me ? 'Jij komt uit' : `${esc(nameOf(S.turn))} komt uit`;
       html = `<div class="hint"><div>${S.final ? '<div class="last">FINALE</div>' : ''}<div class="hint-big">Slag ${S.trickNo}/${S.tricksTotal}</div>` +
-        (S.trickNo === S.tricksTotal ? '<div class="last">Laatste slag — deze telt!</div>' : '') +
+        (S.trickNo === S.tricksTotal ? '<div class="last">Laatste slag, deze telt!</div>' : '') +
         `<div>${who}</div></div></div>`;
     } else if (!S.trick.length && ['blind', 'blindResp', 'scherp', 'wash', 'washCheck', 'pass'].includes(S.phase)) {
       let sub = `${esc(nameOf(S.leader))} komt straks uit`;
@@ -656,7 +665,7 @@
   function promptState() {
     const me = S.me, mp = meP();
     const wait = text => ({ tone: '', html: `<div class="pt"><span class="dots">${text}</span></div>` });
-    if (me == null) return { tone: '', html: '<div class="pt">Je kijkt mee 👀 — er is al een spel bezig.</div>' };
+    if (me == null) return { tone: '', html: '<div class="pt">Je kijkt mee 👀, er is al een spel bezig.</div>' };
     if (mp.dead) return { tone: '', html: '<div class="pt">Je bent af 💀 Kijk lekker mee en bestel een rondje.</div>' };
 
     const extra = S.myExtra || 0;
@@ -681,6 +690,7 @@
       case 'blindResp': {
         const b = S.blind, n = b.amount;
         if (b.by === me) return wait(`Je speelt blind voor ${n}. Wat doen de anderen`);
+        if (b.pending.includes(me) && b.pending[0] !== me) return wait(`Eerst kiest ${esc(nameOf(b.pending[0]))}, daarna jij`);
         if (!b.pending.includes(me)) {
           if (S.blindResp === 'blind') return wait(`Je gaat blind mee voor ${n}. Wachten op de anderen`);
           return wait('Wachten op de anderen');
@@ -688,15 +698,15 @@
         if (S.blindResp === 'seen') {
           return {
             tone: 'alert',
-            html: `<div class="pt">Je hebt gekeken. Mee voor <b>${n + 1}</b> of weg voor ${n}?<small>Weg = ${plural(n)}.</small></div>` +
-              `<div class="pb"><button class="btn ghost" data-act="blindResp" data-choice="weg">Weg</button>` +
+            html: `<div class="pt">Je hebt gekeken. Mee voor <b>${n + 1}</b> of weg voor 2?<small>Weg = 2 strafpunten.</small></div>` +
+              `<div class="pb"><button class="btn ghost" data-act="blindResp" data-choice="weg">Weg (2)</button>` +
               `<button class="btn primary" data-act="blindResp" data-choice="mee">Mee (${n + 1})</button></div>`,
           };
         }
         return {
           tone: 'alert',
           html: `<div class="pt"><b>${esc(nameOf(b.by))}</b> speelt blind voor ${n}!` +
-            `<small>Blind mee = ${n}. Gezien = je kijkt eerst, dan mee voor ${n + 1} of weg voor ${n}.</small></div>` +
+            `<small>Blind mee = ${n}. Gezien = je kijkt eerst, dan mee voor ${n + 1} of weg voor 2.</small></div>` +
             `<div class="pb"><button class="btn ghost" data-act="blindResp" data-choice="seen">Gezien</button>` +
             `<button class="btn primary" data-act="blindResp" data-choice="blind">Blind mee (${n})</button></div>`,
         };
@@ -749,7 +759,7 @@
         return wait('Wachten tot iedereen heeft doorgegeven');
       case 'toep': {
         const t = S.toep;
-        if (t.pending.includes(me)) {
+        if (t.pending[0] === me) {
           const prev = t.prev + extra, now = S.stake + extra;
           return {
             tone: 'alert',
@@ -758,6 +768,7 @@
               `<div class="pb"><button class="btn ghost" data-act="fold">Pas</button><button class="btn primary" data-act="go">Mee!</button></div>`,
           };
         }
+        if (t.pending.includes(me)) return wait(`Eerst kiest ${esc(nameOf(t.pending[0]))}, daarna jij`);
         if (t.by === me) return wait('Je toept! Wachten op de anderen');
         if (mp.folded) return wait('Je hebt gepast deze ronde');
         return wait('Wachten op de anderen');
@@ -767,13 +778,13 @@
         if (S.turn !== me) return wait(`${esc(nameOf(S.turn))} is aan de beurt`);
         let text;
         if (selected) text = 'Tik nog een keer op de kaart om te spelen';
-        else if (!S.trick.length) text = 'Jouw beurt — jij komt uit';
+        else if (!S.trick.length) text = 'Jouw beurt: jij komt uit';
         else {
           const lead = suitOf(S.trick[0].card);
           const can = (S.hand || []).some(c => suitOf(c) === lead);
-          text = can ? `Jouw beurt — beken ${SYM[lead]} ${SUIT_NAME[lead]}` : `Jouw beurt — geen ${SUIT_NAME[lead]}, gooi iets weg`;
+          text = can ? `Jouw beurt: beken ${SYM[lead]} ${SUIT_NAME[lead]}` : `Jouw beurt: geen ${SUIT_NAME[lead]}, gooi iets weg`;
         }
-        const sub = S.trickNo === S.tricksTotal ? '<small>Laatste slag — deze telt!</small>'
+        const sub = S.trickNo === S.tricksTotal ? '<small>Laatste slag, deze telt!</small>'
           : S.final ? '<small>Finale: geen toepen, de laatste slag beslist.</small>'
           : S.toepBlocked ? `<small>${esc(S.toepBlocked)}</small>`
           : S.lastToeper === me ? '<small>Je toepte als laatste, nu even niet.</small>'
@@ -786,7 +797,7 @@
       }
       case 'trickEnd': {
         const w = S.trickWinner === me ? 'Jij wint' : `${esc(nameOf(S.trickWinner))} wint`;
-        const end = S.final ? ' — en de finale!' : ' — en de ronde!';
+        const end = S.final ? ' en de finale!' : ' en de ronde!';
         return { tone: 'info', html: `<div class="pt">${w} de slag${S.trickNo === S.tricksTotal ? end : '.'}</div>` };
       }
       default:
@@ -808,7 +819,7 @@
     const chip = ['play', 'toep', 'scherp', 'blindResp'].includes(S.phase) || p.dead || p.folded ? statusChip(p) : null;
     const inPlay = ['play', 'toep', 'trickEnd'].includes(S.phase) && !p.folded && !p.dead;
     $('#mebar').className = 'mebar' + (p.acting ? ' acting' : '');
-    $('#mebar').innerHTML = `<span class="av">${initial(p.name)}</span><span class="nm">${esc(p.name)}</span>` +
+    $('#mebar').innerHTML = `<span class="av r-${wallet.equip.ring}">${initial(p.name)}</span><span class="nm">${esc(p.name)}</span>` +
       (chip ? `<span class="chip ${chip.cls}">${chip.t}</span>` : '') +
       (inPlay && S.myExtra ? `<span class="chip hot">jij: ${S.stake + S.myExtra}</span>` : '') +
       (hasLives() ? `<span class="pts">${lives(p)} ${p.points}/${S.settings.maxPoints}</span>`
@@ -837,7 +848,7 @@
     let html;
     if (S.handHidden) {
       el.className = 'hand';
-      html = Array.from({ length: S.handCount }, (_, i) => `<div class="card back${deal ? ' deal' : ''}"${dealStyle(i)}></div>`).join('');
+      html = Array.from({ length: S.handCount }, (_, i) => `<div class="card back b-${wallet.equip.back}${deal ? ' deal' : ''}"${dealStyle(i)}></div>`).join('');
     } else {
       el.className = 'hand' + (playing ? ' playing' : '') + (hand.length > 4 ? ' many' : '');
       html = hand.length ? hand.map((c, i) => {
@@ -847,7 +858,7 @@
         if (S.received === c && S.trickNo === 1 && S.phase !== 'pass') cls.push('recv');
         if (deal) cls.push('deal');
         return cardHTML(c, cls.join(' '), `data-card="${c}" role="button"${dealStyle(i)}`);
-      }).join('') : `<div class="empty-hand">${p.dead ? 'Geen kaarten meer — je bent af.' : ''}</div>`;
+      }).join('') : `<div class="empty-hand">${p.dead ? 'Geen kaarten meer, je bent af.' : ''}</div>`;
     }
     // Zelfde kaarten? Dan niet opnieuw tekenen, anders begint de deel-animatie opnieuw.
     if (html !== lastHandHtml) {
@@ -906,7 +917,10 @@
       key = `game-${S.round}`;
       const w = S.winner === S.me ? 'Jij wint het spel!' : `${esc(nameOf(S.winner))} wint het spel!`;
       const seated = S.me != null;
-      html = `<div class="sheet"><div class="trophy">🏆</div><h2>${w}</h2><p class="sub">Potje ${S.gamesPlayed}, na ${S.round} ronde${S.round === 1 ? '' : 's'}. Wie geeft er een rondje?</p>` +
+      const award = S.winner === S.me ? awardForGame() : null;
+      if (award && award.fresh) { toast(`+${award.amount} muntjes!`, 'coins'); play('coin'); }
+      html = `<div class="sheet"><div class="trophy">🏆</div><h2>${w}</h2>` +
+        (award ? `<p class="coins-won"><i class="coin"></i>+${award.amount} muntjes <small>(je hebt er nu ${wallet.coins})</small></p>` : '') + `<p class="sub">Potje ${S.gamesPlayed}, na ${S.round} ronde${S.round === 1 ? '' : 's'}. Wie geeft er een rondje?</p>` +
         standingsHTML(null) + statsHTML() +
         (seated ? `<div class="btns"><button class="btn primary big" data-act="rematch">Nog een potje!</button>` +
           `<button class="btn dark" data-act="toLobby">Naar de lobby</button></div>` : '') + `</div>`;
@@ -925,6 +939,7 @@
       const played = S.me != null && (S.phase === 'gameEnd' || S.result.lines.some(l => l.seat === S.me));
       if (played) {
         play(winner === S.me ? (S.phase === 'gameEnd' ? 'champion' : 'win') : 'lose');
+        if (winner === S.me) celebrate();
         if (winner === S.me) buzz([60, 40, 60, 40, 120]);
       }
     }
@@ -970,11 +985,13 @@
     const logs = (S.log || []).filter(l => l.kind !== 'quiet' || /Ronde|begint/.test(l.text));
     const board = S.players.filter(Boolean).sort((a, b) => b.wins - a.wins);
     $('#winList').innerHTML = S.gamesPlayed
-      ? board.map(p => `<li>${esc(p.name)} — ${p.wins}× gewonnen</li>`).join('')
+      ? board.map(p => `<li>${esc(p.name)}: ${p.wins}× gewonnen</li>`).join('')
       : '<li>Nog geen potje uitgespeeld.</li>';
     $('#logList').innerHTML = logs.slice(-12).map(l => `<li>${esc(l.text)}</li>`).join('') || '<li>Nog niets gebeurd.</li>';
     const inGame = S.phase !== 'lobby' && S.me != null;
-    let actions = S.phase !== 'lobby' && S.isHost ? `<h3 class="log-title">Stijl</h3>${themePicker()}` : '';
+    $('#drawerTheme').innerHTML = themePicker();
+    $('#drawerCoins').innerHTML = `<i class="coin"></i>${wallet.coins}`;
+    let actions = '';
     if (inGame) actions += '<button class="btn dark" data-act="lobby">Spel stoppen → lobby</button>';
     if (net.role) {
       const label = net.role === 'host' ? `Kamer ${esc(net.room)} sluiten` : `Kamer ${esc(net.room)} verlaten`;
@@ -982,7 +999,7 @@
     }
     $('#drawerActions').innerHTML = actions;
   }
-  function openMenu() { $('#drawer').classList.add('open'); $('#drawer').setAttribute('aria-hidden', 'false'); }
+  function openMenu() { $('#rulesBox').open = false; $('#drawer').classList.add('open'); $('#drawer').setAttribute('aria-hidden', 'false'); }
   function closeMenu() { $('#drawer').classList.remove('open'); $('#drawer').setAttribute('aria-hidden', 'true'); }
 
   // ---------- geluid en trillen ----------
@@ -1054,6 +1071,7 @@
     knock: ctx => { thump(ctx, 0); thump(ctx, 0.17); },
     turn: ctx => { tone(ctx, 660, 0, 0.12, 'triangle', 0.12); tone(ctx, 880, 0.09, 0.16, 'triangle', 0.1); },
     pop: ctx => tone(ctx, 990, 0, 0.09, 'sine', 0.1),
+    coin: ctx => { tone(ctx, 988, 0, 0.08, 'square', 0.06); tone(ctx, 1319, 0.08, 0.25, 'square', 0.06); },
     win: ctx => [523, 659, 784, 1047].forEach((f, i) => tone(ctx, f, i * 0.1, 0.25, 'triangle', 0.15)),
     champion: ctx => [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => tone(ctx, f, i * 0.12, 0.3, 'triangle', 0.15)),
     lose: ctx => { tone(ctx, 392, 0, 0.22, 'sine', 0.12); tone(ctx, 311, 0.2, 0.35, 'sine', 0.12); },
@@ -1115,6 +1133,171 @@
     }
   }
 
+  // ---------- muntjes en shop ----------
+  // Zonder account: alles staat op deze telefoon (localStorage).
+
+  const SHOP = [
+    { cat: 'back', title: 'Kaartrug', note: 'Zien de anderen ook', items: [
+      { id: 'rood', name: 'Klassiek rood', price: 0 },
+      { id: 'blauw', name: 'Delfts blauw', price: 150 },
+      { id: 'oranje', name: 'Oranje', price: 150 },
+      { id: 'ruit', name: 'Ruitjes', price: 200 },
+      { id: 'goud', name: 'Goud', price: 300 },
+      { id: 'regenboog', name: 'Regenboog', price: 500 },
+    ] },
+    { cat: 'ring', title: 'Rand om je avatar', note: 'Zien de anderen ook', items: [
+      { id: 'geen', name: 'Geen', price: 0 },
+      { id: 'ijs', name: 'IJs', price: 200 },
+      { id: 'goud', name: 'Goud', price: 250 },
+      { id: 'vuur', name: 'Vuur', price: 300 },
+    ] },
+    { cat: 'felt', title: 'Tafelkleed', note: 'Alleen voor jou', items: [
+      { id: 'groen', name: 'Groen laken', price: 0 },
+      { id: 'blauw', name: 'Blauw laken', price: 150 },
+      { id: 'rood', name: 'Rood laken', price: 150 },
+      { id: 'paars', name: 'Paars laken', price: 200 },
+      { id: 'zwart', name: 'Zwart laken', price: 250 },
+    ] },
+    { cat: 'effect', title: 'Winst-effect', note: 'Alleen voor jou', items: [
+      { id: 'geen', name: 'Geen', price: 0 },
+      { id: 'confetti', name: 'Confetti', price: 300 },
+      { id: 'vuurwerk', name: 'Vuurwerk', price: 500 },
+    ] },
+  ];
+  const START_COINS = 100;
+  const WIN_COINS = 100;     // gewonnen potje met minstens één andere echte speler
+  const BOT_WIN_COINS = 25;  // gewonnen van alleen bots
+
+  function loadWallet() {
+    let w = null;
+    try { w = JSON.parse(store('toep_wallet') || 'null'); } catch (e) { w = null; }
+    const base = {
+      coins: START_COINS, lastAward: '', lastAmount: 0,
+      owned: { back: ['rood'], ring: ['geen'], felt: ['groen'], effect: ['geen'] },
+      equip: { back: 'rood', ring: 'geen', felt: 'groen', effect: 'geen' },
+    };
+    if (!w) return base;
+    return { ...base, ...w, owned: { ...base.owned, ...w.owned }, equip: { ...base.equip, ...w.equip } };
+  }
+  const wallet = loadWallet();
+  const saveWallet = () => store('toep_wallet', JSON.stringify(wallet));
+  saveWallet();
+
+  // Muntjes voor een gewonnen potje, maar één keer per potje (ook als je herlaadt).
+  function awardForGame() {
+    const key = `${S.room || ''}|${S.gamesPlayed}`;
+    if (wallet.lastAward === key) return { amount: wallet.lastAmount, fresh: false };
+    const humans = S.players.filter(p => p && !p.bot).length;
+    const amount = humans >= 2 ? WIN_COINS : BOT_WIN_COINS;
+    wallet.coins += amount;
+    wallet.lastAward = key;
+    wallet.lastAmount = amount;
+    saveWallet();
+    return { amount, fresh: true };
+  }
+
+  function buy(cat, id) {
+    const item = SHOP.find(c => c.cat === cat).items.find(i => i.id === id);
+    if (!item || wallet.owned[cat].includes(id)) return;
+    if (wallet.coins < item.price) {
+      toast(`Je hebt nog ${item.price - wallet.coins} muntjes te weinig.`, 'err');
+      return;
+    }
+    wallet.coins -= item.price;
+    wallet.owned[cat].push(id);
+    wallet.equip[cat] = id;
+    saveWallet();
+    play('coin');
+    toast(`${item.name} gekocht!`);
+    afterLookChange();
+  }
+
+  function equip(cat, id) {
+    if (!wallet.owned[cat].includes(id)) return;
+    wallet.equip[cat] = id;
+    saveWallet();
+    afterLookChange();
+  }
+
+  function afterLookChange() {
+    renderShop();
+    if (S) render();
+  }
+
+  // Wat de anderen van jou zien (kaartrug en rand) naar de tafel sturen.
+  let lookPending = false;
+  function syncLook() {
+    const me = meP();
+    if (!me || !me.look || lookPending) return;
+    if (me.look.back === wallet.equip.back && me.look.ring === wallet.equip.ring) return;
+    lookPending = true;
+    send('look', { back: wallet.equip.back, ring: wallet.equip.ring }).finally(() => { lookPending = false; });
+  }
+
+  function previewHTML(cat, item) {
+    if (cat === 'back') return `<div class="card back b-${item.id}" style="--w:40px"></div>`;
+    if (cat === 'ring') return `<span class="av r-${item.id}">${initial((S && meP() || {}).name || store('toep_name') || 'J')}</span>`;
+    if (cat === 'felt') return `<div class="felt-swatch f-${item.id}"></div>`;
+    return `<span class="fx-icon">${{ geen: '·', confetti: '🎉', vuurwerk: '🎆' }[item.id]}</span>`;
+  }
+
+  function renderShop() {
+    const el = $('#shop');
+    if (el.hidden) return;
+    const cats = SHOP.map(c => `<section class="shop-cat"><h3>${c.title} <small>${c.note}</small></h3><div class="shop-grid">${
+      c.items.map(i => {
+        const owned = wallet.owned[c.cat].includes(i.id);
+        const used = wallet.equip[c.cat] === i.id;
+        let btn;
+        if (used) btn = '<button class="btn mini-btn" disabled>In gebruik</button>';
+        else if (owned) btn = `<button class="btn mini-btn ghost" data-act="equip" data-cat="${c.cat}" data-id="${i.id}">Gebruiken</button>`;
+        else btn = `<button class="btn mini-btn primary" data-act="buy" data-cat="${c.cat}" data-id="${i.id}"><i class="coin"></i>${i.price}</button>`;
+        const tryBtn = c.cat === 'effect' && i.id !== 'geen' ? `<button class="link" data-act="tryEffect" data-id="${i.id}">Probeer</button>` : '';
+        return `<div class="shop-item ${used ? 'used' : ''}">${previewHTML(c.cat, i)}<b>${i.name}</b>${btn}${tryBtn}</div>`;
+      }).join('')}</div></section>`).join('');
+    el.innerHTML = `<div class="sheet shop-sheet"><div class="shop-head"><h2>Shop</h2><span class="coins"><i class="coin"></i>${wallet.coins}</span>` +
+      `<button class="iconbtn" data-act="closeShop" aria-label="Sluiten">✕</button></div>` +
+      `<p class="sub">Win een potje voor ${WIN_COINS} muntjes (${BOT_WIN_COINS} als je alleen van bots wint).</p>${cats}</div>`;
+  }
+
+  function openShop() {
+    closeMenu();
+    $('#shop').hidden = false;
+    renderShop();
+  }
+
+  // Feestje bij winst: confetti of vuurwerk (alleen als je dat gekocht hebt).
+  function celebrate(kind = wallet.equip.effect) {
+    const box = $('#bubbles');
+    const colors = ['#ffc84a', '#ff7a1a', '#d2202c', '#21e6c1', '#3d5afe', '#ff3c8e', '#8ee69a'];
+    const pick = () => colors[Math.floor(Math.random() * colors.length)];
+    if (kind === 'confetti') {
+      for (let i = 0; i < 80; i++) {
+        const c = document.createElement('i');
+        c.className = 'confetti';
+        c.style.cssText = `left:${Math.random() * 100}vw;background:${pick()};animation-delay:${Math.random() * 0.6}s;` +
+          `animation-duration:${2 + Math.random() * 1.5}s;--rot:${Math.random() * 720 - 360}deg;--drift:${Math.random() * 120 - 60}px`;
+        box.append(c);
+        setTimeout(() => c.remove(), 4200);
+      }
+    } else if (kind === 'vuurwerk') {
+      for (let b = 0; b < 4; b++) {
+        const x = 15 + Math.random() * 70, y = 15 + Math.random() * 40, color = pick();
+        setTimeout(() => {
+          play('pop');
+          for (let i = 0; i < 26; i++) {
+            const sp = document.createElement('i');
+            const ang = (i / 26) * Math.PI * 2, dist = 70 + Math.random() * 50;
+            sp.className = 'spark';
+            sp.style.cssText = `left:${x}vw;top:${y}vh;background:${color};--dx:${Math.cos(ang) * dist}px;--dy:${Math.sin(ang) * dist}px`;
+            box.append(sp);
+            setTimeout(() => sp.remove(), 1400);
+          }
+        }, b * 450);
+      }
+    }
+  }
+
   // ---------- meldingen ----------
 
   function toast(text, kind = '', cards = null) {
@@ -1167,7 +1350,7 @@
       if (S.phase !== 'toep') play('turn'); // bij een toep klinkt de klop al
     }
     prevNeeds = needs;
-    document.title = needs ? '● Jouw beurt — Toepen' : 'Toepen';
+    document.title = needs ? '● Jouw beurt · Toepen' : 'Toepen';
   }
 
   // ---------- invoer ----------
@@ -1217,6 +1400,11 @@
         store('toep_sound', prefs.sound ? '1' : '0');
         renderPrefs();
         return play('pop');
+      case 'openShop': return openShop();
+      case 'closeShop': $('#shop').hidden = true; return undefined;
+      case 'buy': return buy(d.cat, d.id);
+      case 'equip': return equip(d.cat, d.id);
+      case 'tryEffect': return celebrate(d.id);
       case 'toggleBuzz':
         prefs.buzz = !prefs.buzz;
         store('toep_buzz', prefs.buzz ? '1' : '0');
@@ -1246,6 +1434,10 @@
       case 'start': return act('start');
       case 'leave': return act('leave');
       case 'openMenu': return openMenu();
+      case 'openRules':
+        openMenu();
+        $('#rulesBox').open = true; // via de link: meteen uitgeklapt
+        return $('#rulesBox').scrollIntoView({ block: 'start' });
       case 'closeMenu': return closeMenu();
       case 'host': return startP2P('host');
       case 'joinCode': {
@@ -1290,6 +1482,11 @@
     $('#nameInput').blur();
     act('join', { name });
   });
+
+  // Uitklapblokken onthouden, want de lobby wordt bij elke update opnieuw getekend.
+  document.addEventListener('toggle', e => {
+    if (e.target.id === 'moreSettings') moreOpen = e.target.open;
+  }, true);
 
   $('#homeForm').addEventListener('submit', e => {
     e.preventDefault();

@@ -11,13 +11,18 @@
   const SUITS = ['S', 'H', 'C', 'D'];
   const FULL_DECK = SUITS.flatMap(s => RANKS.map(r => r + s));
   const SUIT_NAMES = { S: 'schoppen', H: 'harten', C: 'klaveren', D: 'ruiten' };
-  const BOT_NAMES = ['Henk', 'Truus', 'Kees', 'Ans', 'Gerrit', 'Bep'];
+  const BOT_NAMES = ['Robin', 'Sebastiaan', 'Martijn'];
   const LEVELS = ['makkelijk', 'gemiddeld', 'moeilijk', 'god'];
   const FACES = ['J', 'Q', 'K', 'A'];
-  const THEMES = ['cafe', 'delft', 'nacht', 'strak'];
+  const THEMES = ['cafe', 'nacht'];
   const REACTIONS = ['🍺', '👏', '😏', '😱', '😂', '🔥'];
+  const LOOKS = {
+    back: ['rood', 'blauw', 'oranje', 'ruit', 'goud', 'regenboog'],
+    ring: ['geen', 'ijs', 'goud', 'vuur'],
+  };
   const MAX_BLINDS = 2;        // per speler per potje
   const BLIND_AMOUNTS = [2, 3, 4];
+  const SEEN_FOLD = 2;         // strafpunten als je na 'gezien' weggaat
 
   const ROUND_PAUSE = 10;      // seconden tussen rondes
   const TRICK_PAUSE = 1.4;     // seconden dat een volle slag blijft liggen
@@ -104,7 +109,7 @@
   }
 
   function newPlayer(id, name, bot, seat) {
-    const p = { id, name, bot, seat, level: 'gemiddeld', points: 0, dead: false, blindsUsed: 0, wins: 0, stats: newStats() };
+    const p = { id, name, bot, seat, level: 'gemiddeld', points: 0, dead: false, blindsUsed: 0, wins: 0, stats: newStats(), look: { back: 'rood', ring: 'geen' } };
     resetRound(p);
     return p;
   }
@@ -221,6 +226,8 @@
     restore(json) {
       Object.assign(this, JSON.parse(json));
       for (const p of this.seated()) if (!p.stats) p.stats = newStats(); // opgeslagen door een oudere versie
+      if (!THEMES.includes(this.settings.theme)) this.settings.theme = 'cafe'; // stijl die niet meer bestaat
+      for (const p of this.seated()) if (!p.look) p.look = { back: 'rood', ring: 'geen' };
       // Lopende pauzes opnieuw starten.
       if (this.phase === 'trickEnd') this.after(TRICK_PAUSE, () => this.finishTrick());
       if (this.phase === 'roundEnd') {
@@ -245,6 +252,7 @@
           case 'settings': this.setSettings(msg); break;
           case 'theme': this.setTheme(pid, msg.theme); break;
           case 'react': this.react(p, msg.emoji); break;
+          case 'look': this.setLook(p, msg); break;
           case 'start': this.start(); break;
           case 'blind': this.doBlind(p, msg.amount || 0); break;
           case 'blindResp': this.doBlindResp(p, msg.choice); break;
@@ -346,6 +354,13 @@
       if (m.rule in s.rules) s.rules[m.rule] = !s.rules[m.rule];
     }
 
+    // Uiterlijk uit de shop dat de anderen ook zien. Wat je bezit, houdt elke
+    // telefoon zelf bij; hier wordt alleen gecontroleerd dat het een bestaand item is.
+    setLook(p, m) {
+      if (LOOKS.back.includes(m.back)) p.look.back = m.back;
+      if (LOOKS.ring.includes(m.ring)) p.look.ring = m.ring;
+    }
+
     // Snelle reactie (emoji) die even bij je naam verschijnt.
     react(p, emoji) {
       if (!REACTIONS.includes(emoji)) fail('Onbekende reactie.');
@@ -401,6 +416,10 @@
         if (!p.dead) p.hand = this.deck.splice(0, this.tricksTotal);
       }
       if (this.seats[this.leader].dead) this.leader = this.nextSeat(this.leader, q => !q.dead);
+      // Wie op 14 staat, mag altijd beginnen (de eerste met de klok mee als het er meer zijn).
+      if (onEdge.length && !this.final) {
+        this.leader = this.orderFrom(this.leader).find(s => !this.seats[s].dead && this.seats[s].points === this.edge);
+      }
       this.log(`Ronde ${this.round}: ${this.seats[this.leader].name} komt uit`, 'quiet');
 
       if (this.finaleMode) {
@@ -459,6 +478,7 @@
     doBlindResp(p, choiceName) {
       const b = this.blind;
       if (this.phase !== 'blindResp' || !b.pending.includes(p.seat)) fail('Er valt niets te kiezen.');
+      if (b.pending[0] !== p.seat) fail(`Eerst kiest ${this.seats[b.pending[0]].name}.`);
       const r = p.blindResp, n = b.amount;
       if (choiceName === 'seen' && r === null) {
         p.blindResp = 'seen';
@@ -475,9 +495,9 @@
       } else if (choiceName === 'weg' && r === 'seen') {
         p.blindResp = 'weg';
         p.folded = true;
-        p.foldPenalty = n;
+        p.foldPenalty = SEEN_FOLD; // gezien weggaan kost altijd 2
         p.stats.folds++;
-        this.log(`${p.name} gaat weg (${pointsText(n)})`, 'fold');
+        this.log(`${p.name} gaat gezien weg (${pointsText(SEEN_FOLD)})`, 'fold');
       } else {
         fail('Dat kan nu niet.');
       }
@@ -673,11 +693,10 @@
     // Reden waarom p niet mag toepen vanwege 'op scherp' of de finale, anders null.
     toepBlocked(p) {
       if (this.final) return 'In de finale wordt niet getoept.';
-      if (p.points === this.edge) return `Op ${this.edge} punten mag je niet toepen.`;
-      const active = this.active();
-      if (active.length === 2 && active.some(q => q.points === this.edge)) {
-        return `Eén tegen één met iemand op ${this.edge}: er wordt niet getoept.`;
-      }
+      if (p.points >= this.edge) return `Op ${this.edge} punten mag je niet toepen.`;
+      // Je kunt niet boven de 15 eindigen, dus tegen iemand op 14 heeft toepen geen zin.
+      const onEdge = this.active().find(q => q.points >= this.edge);
+      if (onEdge) return `${onEdge.name} staat op ${this.edge}: daar kun je niet tegen toepen.`;
       return null;
     }
 
@@ -713,6 +732,7 @@
     doToepResponse(p, go) {
       const t = this.toep;
       if (this.phase !== 'toep' || !t.pending.includes(p.seat)) fail('Er is geen toep om op te reageren.');
+      if (t.pending[0] !== p.seat) fail(`Eerst kiest ${this.seats[t.pending[0]].name}.`);
       t.pending.splice(t.pending.indexOf(p.seat), 1);
       t.responses[p.seat] = go;
       if (go) {
@@ -757,6 +777,7 @@
           note = '';
           if (boer) { pen++; note = 'boerenslag'; }
         }
+        pen = Math.min(pen, this.settings.maxPoints - p.points); // nooit boven de 15
         p.points += pen;
         lines.push({ seat: p.seat, pen, note });
       }
@@ -772,7 +793,8 @@
       const what = this.final ? 'de finale' : `ronde ${this.round}`;
       this.log(`${winner.name} wint ${what}${byFold ? ' (de rest ging weg)' : ''}`, 'round');
       this.checkDeaths();
-      this.leader = w;
+      // De volgende ronde begint de speler links van de winnaar.
+      this.leader = this.nextSeat(w, q => !q.dead);
       if (this.alive().length <= 1) return this.endGame();
       this.phase = 'roundEnd';
       this.nextRoundAt = Date.now() + ROUND_PAUSE * 1000 * this.delay;
@@ -811,12 +833,12 @@
       if (!p || p.dead) return false;
       switch (this.phase) {
         case 'blind': return p.blindDecision === null;
-        case 'blindResp': return this.blind.pending.includes(p.seat);
+        case 'blindResp': return this.blind.pending[0] === p.seat; // om de beurt, met de klok mee
         case 'scherp': return this.scherp.pending.includes(p.seat);
         case 'wash': return p.washDecision === null;
         case 'washCheck': return this.washCheck.pending.includes(p.seat);
         case 'pass': return p.passCard === null;
-        case 'toep': return this.toep.pending.includes(p.seat);
+        case 'toep': return this.toep.pending[0] === p.seat; // om de beurt, met de klok mee
         case 'play': return this.turn === p.seat;
         default: return false;
       }
@@ -950,8 +972,8 @@
 
     botBlindResp(p) {
       const n = this.blind.amount;
-      if (p.blindResp === 'seen') return this.botGo(p, n, n + 1) ? 'mee' : 'weg';
-      if (p.points + n >= this.settings.maxPoints) return 'blind'; // weg is toch af
+      if (p.blindResp === 'seen') return this.botGo(p, SEEN_FOLD, n + 1) ? 'mee' : 'weg';
+      if (p.points + SEEN_FOLD >= this.settings.maxPoints) return 'blind'; // weg is toch af
       if (p.level === 'god') return this.botWinChance(p, 80) > 0.2 ? 'blind' : 'seen';
       if (p.level === 'makkelijk') return choice(['blind', 'seen']);
       if (p.level === 'gemiddeld') return Math.random() < 0.3 ? 'blind' : 'seen';
@@ -1007,7 +1029,7 @@
       if (!p) return null;
       return {
         seat: p.seat, name: p.name, bot: p.bot, level: p.bot ? p.level : null,
-        points: p.points, wins: p.wins, stats: p.stats, dead: p.dead, folded: p.folded, cards: p.hand.length, extra: p.extra,
+        points: p.points, wins: p.wins, stats: p.stats, look: p.look, dead: p.dead, folded: p.folded, cards: p.hand.length, extra: p.extra,
         online: p.bot || this.isConnected(p.id), acting: this.needsAction(p),
       };
     }

@@ -13,6 +13,8 @@ De host-telefoon draait het spel: houd de app open. Herlaadt iemand de pagina (o
 
 Tip: kies in Safari/Chrome "Zet op beginscherm" (of "App installeren"), dan draait het spel schermvullend als een app en start het direct op.
 
+Muntjes en shop: je begint met 100 muntjes. Win je een potje met minstens één andere echte speler, dan krijg je 100 muntjes (25 als je alleen van bots wint). In de shop koop je kaartruggen en een rand om je avatar (die zien de anderen ook), een tafelkleed en een winst-effect. Alles wordt op je eigen telefoon bewaard, zonder account.
+
 Extra's: geluid en trillen (aan/uit in het ☰-menu), snelle reacties via de 😀-knop, statistieken en titels op het eindscherm, en de host kiest de stijl.
 
 ## Spelregels
@@ -20,11 +22,12 @@ Extra's: geluid en trillen (aan/uit in het ☰-menu), snelle reacties via de �
 Zie het ☰-menu in het spel. Kort:
 - 32 kaarten, 4 per speler. Rangorde laag → hoog: B V H A 7 8 9 10.
 - Kleur bekennen. Alleen de laatste slag telt.
-- Toepen = inzet +1; anderen gaan mee of passen (passen kost de oude inzet).
-- Blind: vóór iemand kijkt mag je blind spelen voor 2–4 punten (max. 2× per speler per potje). Anderen: blind mee (= het bedrag) of gezien (kijken, dan mee voor +1 of weg voor het bedrag).
-- Af bij 15 strafpunten (10 kan ook). Laatste overlevende wint.
-- Op scherp: wie op 14 staat moet genomen worden. Iedereen kijkt; mee = 2 punten, weg = 1.
-- Op 14 mag je niet toepen; één tegen één met iemand op 14 toept niemand.
+- Toepen = inzet +1; de anderen kiezen om de beurt (met de klok mee) mee of passen (passen kost de oude inzet).
+- De speler links van de rondewinnaar begint de volgende ronde.
+- Blind: vóór iemand kijkt mag je blind spelen voor 2, 3 of 4 punten (max. 2× per speler per potje). Anderen kiezen om de beurt: blind mee (= het bedrag) of gezien (kijken, dan mee voor +1 of weg voor 2).
+- Af bij 15 strafpunten (10 kan ook); je eindigt nooit boven de 15. Laatste overlevende wint.
+- Op scherp: wie op 14 staat moet genomen worden en mag beginnen. Iedereen kijkt; mee = 2 punten, weg = 1. Geen blind.
+- Zolang iemand op 14 meedoet, kan niemand toepen.
 - Finale: staan alle overgebleven spelers op 14, dan 8 kaarten elk, zonder toepen.
 
 **Spelvorm Finale**: één ronde, 8 kaarten per persoon, niet toepen. Laatste slag wint het potje.

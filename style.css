@@ -630,27 +630,6 @@ input { font: inherit; }
 
 /* ---------- stijlen (kiest de host in de instellingen) ---------- */
 
-/* Delfts blauw: licht, Hollands, porselein */
-:root[data-theme="delft"] {
-  --wood: #eef3fa; --wood-2: #ffffff; --wood-3: #1d3f8f; --wood-hi: #c9d6ee;
-  --felt: #ffffff; --felt-2: #f7f9fd; --felt-3: #e8eef8;
-  --cream: #ffffff; --cream-2: #c9d6ee; --ink: #13285c; --muted: #5b6b8f;
-  --chalk: #13285c; --chalk-dim: rgba(19, 40, 92, .66);
-  --gold: #1d3f8f; --gold-2: #0f2560; --on-gold: #ffffff; --on-ink: #ffffff;
-  --orange: #ff7a00; --orange-2: #c45c00; --ok: #1f8a4c;
-  --red: #c8102e; --blue: #1d3f8f; --green: #1f7a46;
-  --av-bg: #1d3f8f; --av-text: #ffffff;
-  --well: rgba(19, 40, 92, .07); --glass: rgba(19, 40, 92, .07); --glass-line: rgba(19, 40, 92, .2);
-  --tally-off: rgba(19, 40, 92, .14); --hint: rgba(19, 40, 92, .16);
-  --drop: #c9d6ee; --stake-dot: #ffffff; --stake-dot-text: #1d3f8f;
-  --back-a: #1d3f8f; --back-b: #2f5bc0;
-  --page-bg: #eef3fa; --panel-bg: #ffffff; --panel-inset: inset 0 0 0 0 transparent;
-  --felt-bg: #ffffff; --felt-inset: inset 0 0 0 3px #e8eef8;
-  --card-face: #ffffff;
-  --font-display: Georgia, 'Times New Roman', serif;
-  color-scheme: light;
-}
-
 /* Nachtkroeg: donker met felle accenten */
 :root[data-theme="nacht"] {
   --wood: #14112b; --wood-2: #1d1940; --wood-3: #3a3270; --wood-hi: #4b4290;
@@ -667,35 +646,6 @@ input { font: inherit; }
   --felt-bg: var(--felt-2); --felt-inset: inset 0 0 0 2px rgba(0, 0, 0, .25);
   --card-face: #f4f1ff;
 }
-
-/* Strak en licht: minimaal, veel rust */
-:root[data-theme="strak"] {
-  --wood: #f4f4f5; --wood-2: #ffffff; --wood-3: #e4e4e7; --wood-hi: #e4e4e7;
-  --felt: #ffffff; --felt-2: #fafafa; --felt-3: #f4f4f5;
-  --cream: #ffffff; --cream-2: #e4e4e7; --ink: #111111; --muted: #71717a;
-  --chalk: #111111; --chalk-dim: rgba(17, 17, 17, .6);
-  --gold: #111111; --gold-2: #000000; --on-gold: #ffffff; --on-ink: #ffffff;
-  --orange: #0090ff; --orange-2: #0065b3; --ok: #30a46c;
-  --red: #e5484d; --blue: #0070d8; --green: #30a46c;
-  --av-bg: #111111; --av-text: #ffffff;
-  --well: rgba(0, 0, 0, .05); --glass: rgba(0, 0, 0, .05); --glass-line: rgba(0, 0, 0, .14);
-  --tally-off: rgba(0, 0, 0, .12); --hint: rgba(0, 0, 0, .12);
-  --drop: #e4e4e7; --stake-dot: #ffffff; --stake-dot-text: #111111;
-  --back-a: #d4d4d8; --back-b: #a1a1aa;
-  --page-bg: #f4f4f5; --panel-bg: #ffffff; --panel-inset: inset 0 0 0 0 transparent;
-  --felt-bg: #ffffff; --felt-inset: inset 0 0 0 0 transparent;
-  --card-face: #ffffff;
-  --font-display: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  --font-body: system-ui, -apple-system, 'Segoe UI', sans-serif;
-  color-scheme: light;
-}
-:root[data-theme="strak"] .logo, :root[data-theme="strak"] .brand { transform: none; text-shadow: none; }
-
-/* lichte stijlen: invoervelden en botniveaus zichtbaar houden */
-:root[data-theme="delft"] .field, :root[data-theme="delft"] .join input,
-:root[data-theme="strak"] .field, :root[data-theme="strak"] .join input { box-shadow: inset 0 0 0 2px var(--glass-line); }
-:root[data-theme="delft"] .lvl-makkelijk, :root[data-theme="strak"] .lvl-makkelijk { color: var(--ok); background: rgba(48, 164, 108, .14); }
-:root[data-theme="delft"] .lvl-moeilijk, :root[data-theme="strak"] .lvl-moeilijk { color: var(--orange-2); background: rgba(255, 122, 0, .14); }
 
 /* kaarten delen en de slag naar de winnaar schuiven */
 .card.deal { animation: dealIn .42s cubic-bezier(.2, .9, .3, 1.15) both; }
@@ -746,8 +696,24 @@ input { font: inherit; }
 .stats td:first-child { text-align: left; max-width: 90px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .stats-note { margin: 4px 0 0; font-size: 11px; color: var(--muted); }
 
-/* voorkeuren in het menu */
-.prefs { display: grid; gap: 8px; margin-top: 14px; }
+/* menu: kopjes, instellingen en uitklapblokken */
+.prefs { display: grid; gap: 8px; }
+.menu-h { font-size: 18px; margin: 20px 0 8px; color: var(--gold); font-weight: 600; }
+.menu-sub { font-size: 14px; color: var(--chalk-dim); margin: 12px 0 6px; }
+.menu-sub small { font-size: 12px; }
+.drawer-actions { margin-top: 0; }
+.drawer-actions:empty::before { content: 'Je zit niet in een kamer.'; color: var(--chalk-dim); font-size: 14px; font-weight: 500; }
+details > summary { list-style: none; cursor: pointer; display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary .chev { font-size: 18px; color: var(--chalk-dim); transition: transform .2s; }
+details[open] > summary .chev { transform: rotate(180deg); }
+.rules-box { margin-top: 4px; }
+.rules-box > summary .menu-h { margin: 20px 0 8px; }
+.more > summary h2 { margin: 0; }
+.more[open] > summary { margin-bottom: 4px; }
+.sub-h { font-size: 16px; margin: 16px 0 8px; font-weight: 600; }
+.lobby-head { position: relative; }
+.lobby-menu { position: absolute; top: 0; right: 0; }
 
 /* stijlkeuze */
 .themes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -761,3 +727,79 @@ input { font: inherit; }
 .theme-opt b { font-size: 15px; }
 .swatch { display: flex; height: 26px; border-radius: 8px; overflow: hidden; }
 .swatch i { flex: 1; }
+
+/* ---------- shop: kaartruggen, randen, tafelkleden ---------- */
+
+.b-blauw { --back-a: #1d3f8f; --back-b: #3a6ad4; }
+.b-oranje { --back-a: #ff7a1a; --back-b: #c95500; }
+.b-goud { --back-a: #c8901f; --back-b: #ffd76a; }
+.mback.b-ruit, .card.back.b-ruit { background: repeating-conic-gradient(#1b1b1b 0 25%, #f5f5f5 0 50%) 0 0 / 8px 8px; }
+.mback.b-ruit { background-size: 6px 6px; }
+.mback.b-regenboog, .card.back.b-regenboog { background: linear-gradient(135deg, #ff4d4d, #ffb84d, #ffe94d, #4dd27a, #4d9bff, #a04dff); }
+
+.av.r-ijs { outline: 3px solid #8fdcff; outline-offset: 2px; }
+.av.r-goud { outline: 3px solid #ffc84a; outline-offset: 2px; }
+.av.r-vuur { outline: 3px solid #ff5a1a; outline-offset: 2px; animation: vuur 1.2s ease-in-out infinite; }
+@keyframes vuur { 50% { outline-color: #ffc84a; } }
+
+.f-blauw { --felt-bg: radial-gradient(ellipse at 50% 45%, #2f74cf 0%, #1a4f96 58%, #0e2f5e 100%); }
+.f-rood { --felt-bg: radial-gradient(ellipse at 50% 45%, #b8333b 0%, #8a1f26 58%, #5a1016 100%); }
+.f-paars { --felt-bg: radial-gradient(ellipse at 50% 45%, #6b3fb3 0%, #4c2a86 58%, #2e1856 100%); }
+.f-zwart { --felt-bg: radial-gradient(ellipse at 50% 45%, #3a3a3a 0%, #222 58%, #111 100%); }
+.felt-swatch { width: 56px; height: 40px; border-radius: 10px; background: var(--felt-bg); border: 3px solid var(--wood-3); }
+
+/* muntjes */
+.shop-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.shop-row > div { font-size: 16px; }
+.coins { font-family: var(--font-display); font-size: 20px; color: var(--gold); }
+.menu-shop { margin-top: 14px; padding: 10px 12px; border-radius: 14px; background: var(--well); }
+.coins-won { margin: -6px 0 12px; font-family: var(--font-display); font-size: 18px; color: var(--gold-2); }
+.coins-won small { font-family: var(--font-body); font-size: 13px; color: var(--muted); }
+.toast.coins { background: var(--gold); color: var(--on-gold); border-color: var(--gold-2); font-size: 17px; }
+
+/* shopscherm */
+.shop-overlay { z-index: 45; align-items: start; overflow-y: auto; }
+.shop-sheet { text-align: left; margin: 0 auto; max-height: none; }
+.shop-head { display: flex; align-items: center; gap: 10px; }
+.shop-head h2 { margin: 0; flex: 1; }
+.shop-head .coins { color: var(--gold-2); }
+.shop-head .iconbtn { background: rgba(0, 0, 0, .06); color: var(--ink); }
+.shop-cat h3 { margin: 16px 0 8px; font-size: 17px; }
+.shop-cat h3 small { font-size: 12px; color: var(--muted); font-weight: 500; }
+.shop-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.shop-item {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center;
+  padding: 10px 6px; border-radius: 14px; background: rgba(0, 0, 0, .05);
+}
+.shop-item.used { box-shadow: inset 0 0 0 3px var(--gold); }
+.shop-item b { font-size: 13px; line-height: 1.2; }
+.shop-item .av { width: 40px; height: 40px; background: var(--ink); color: var(--cream); }
+.shop-item .card.back { height: calc(var(--w) * 1.4); }
+.shop-item .link { font-size: 13px; color: var(--orange-2); }
+.mini-btn { min-height: 34px; padding: 4px 10px; font-size: 14px; width: 100%; }
+.mini-btn:disabled { opacity: .55; }
+.fx-icon { font-size: 34px; line-height: 40px; height: 40px; }
+
+/* winst-effecten */
+.confetti {
+  position: absolute; top: -12px; width: 9px; height: 14px; border-radius: 2px;
+  animation: confetti linear forwards;
+}
+@keyframes confetti {
+  to { transform: translate(var(--drift), 110vh) rotate(var(--rot)); }
+}
+.spark {
+  position: absolute; width: 7px; height: 7px; border-radius: 50%;
+  animation: spark 1.2s ease-out forwards;
+}
+@keyframes spark {
+  0% { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx), calc(var(--dy) + 40px)) scale(.4); opacity: 0; }
+}
+
+/* muntje (getekend, want niet elk toestel kent de 🪙-emoji) */
+.coin {
+  display: inline-block; width: .95em; height: .95em; margin-right: .3em; vertical-align: -.12em;
+  border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3b0, #ffc84a 45%, #c8901f 100%);
+  box-shadow: inset 0 0 0 .08em #a8741a;
+}
