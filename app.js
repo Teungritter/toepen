@@ -323,7 +323,7 @@
   // Avatars: Notionists-gezichten voor spelers (CC0) en Bottts-robots voor bots,
   // allebei via DiceBear en meegeleverd in de map avatars/.
   const AVATAR_COUNT = 24;
-  const BOT_AVATARS = ['robin', 'sebastiaan', 'martijn'];
+  const BOT_AVATARS = ['robin', 'sebastian', 'martijn'];
   function nameAvatar(name) {
     let h = 0;
     for (const ch of (name || '').trim().toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;

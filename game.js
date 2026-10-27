@@ -11,7 +11,7 @@
   const SUITS = ['S', 'H', 'C', 'D'];
   const FULL_DECK = SUITS.flatMap(s => RANKS.map(r => r + s));
   const SUIT_NAMES = { S: 'schoppen', H: 'harten', C: 'klaveren', D: 'ruiten' };
-  const BOT_NAMES = ['Robin', 'Sebastiaan', 'Martijn'];
+  const BOT_NAMES = ['Robin', 'Sebastian', 'Martijn'];
   const LEVELS = ['makkelijk', 'gemiddeld', 'moeilijk', 'god'];
   const FACES = ['J', 'Q', 'K', 'A'];
   const THEMES = ['cafe', 'nacht'];
