@@ -508,8 +508,8 @@ input { font: inherit; }
 .card .face img { width: 100%; height: 100%; display: block; object-fit: cover; }
 .av img { width: 100%; height: 100%; display: block; object-fit: cover; border-radius: 50%; }
 .card.sH { color: var(--red); }
-.card.sD { color: var(--blue); }
-.card.sC { color: var(--green); }
+.card.sD { color: var(--red); }
+.card.sC { color: var(--black); }
 .card.sS { color: var(--black); }
 .card.mini { --w: 38px; display: inline-block; }
 .card.mini .ci2, .card.mini .cc { display: none; }
