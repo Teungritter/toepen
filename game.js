@@ -694,6 +694,8 @@
     toepBlocked(p) {
       if (this.final) return 'In de finale wordt niet getoept.';
       if (p.points >= this.edge) return `Op ${this.edge} punten mag je niet toepen.`;
+      // Blind spelen is al een soort toep: wie blind speelde, toept die ronde niet meer.
+      if (this.blind && this.blind.by === p.seat) return 'Je speelde blind: deze ronde kun je niet meer toepen.';
       // Je kunt niet boven de 15 eindigen, dus tegen iemand op 14 heeft toepen geen zin.
       const onEdge = this.active().find(q => q.points >= this.edge);
       if (onEdge) return `${onEdge.name} staat op ${this.edge}: daar kun je niet tegen toepen.`;

@@ -24,7 +24,7 @@ Zie het ☰-menu in het spel. Kort:
 - Kleur bekennen. Alleen de laatste slag telt.
 - Toepen = inzet +1; de anderen kiezen om de beurt (met de klok mee) mee of passen (passen kost de oude inzet).
 - De speler links van de rondewinnaar begint de volgende ronde.
-- Blind: vóór iemand kijkt mag je blind spelen voor 2, 3 of 4 punten (max. 2× per speler per potje). Anderen kiezen om de beurt: blind mee (= het bedrag) of gezien (kijken, dan mee voor +1 of weg voor 2).
+- Blind: vóór iemand kijkt mag je blind spelen voor 2, 3 of 4 punten (max. 2× per speler per potje). Anderen kiezen om de beurt: blind mee (= het bedrag) of gezien (kijken, dan mee voor +1 of weg voor 2). Wie blind speelt, kan die ronde zelf niet meer toepen.
 - Af bij 15 strafpunten (10 kan ook); je eindigt nooit boven de 15. Laatste overlevende wint.
 - Op scherp: wie op 14 staat moet genomen worden en mag beginnen. Iedereen kijkt; mee = 2 punten, weg = 1. Geen blind.
 - Zolang iemand op 14 meedoet, kan niemand toepen.
@@ -55,3 +55,10 @@ Bij een update: stap 2 opnieuw (bestaande bestanden worden overschreven).
 - `sw.js`, `manifest.webmanifest`, `icon-*.png`, `icon.svg`: installeerbare app (PWA) en iconen.
 - `vendor/`: PeerJS 1.5.4 en qrcodejs 1.0.0, lokaal meegeleverd.
 - `fonts/`: Fredoka en Nunito (SIL Open Font License).
+
+## Illustraties en licenties
+
+- `avatars/p*.webp`: Notionists door Zoish, via [DiceBear](https://www.dicebear.com) (CC0 1.0).
+- `avatars/bot-*.webp`: Bottts door Pablo Stanley, via DiceBear (vrij voor persoonlijk en commercieel gebruik).
+- `cards/*.jpg`: klassieke kaartfiguren uit [Vector Playing Cards](https://github.com/notpeter/Vector-Playing-Cards), oorspronkelijk van Byron Knoll (publiek domein).
+- Lettertypes Fredoka en Nunito: SIL Open Font License.

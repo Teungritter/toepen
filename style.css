@@ -162,7 +162,7 @@ input { font: inherit; }
 }
 .join input:focus { outline: 3px solid var(--gold); }
 
-.seats { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.seats { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; }
 .seat {
   display: flex; align-items: center; gap: 10px;
   background: var(--well);
@@ -170,7 +170,7 @@ input { font: inherit; }
 }
 .seat.me { box-shadow: inset 0 0 0 2px var(--gold); }
 .seat.empty { background: transparent; border: 2px dashed var(--glass-line); }
-.seat .nm { flex: 1; font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.seat .nm { flex: 1; min-width: 0; font-size: 17px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .seat .nm em { font-style: normal; color: var(--gold); font-size: 14px; }
 .seat.empty .nm { color: var(--chalk-dim); font-weight: 500; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: #c44; flex: none; }
@@ -499,13 +499,14 @@ input { font: inherit; }
   line-height: 1;
 }
 .card .face {
-  width: 54%; height: 58%;
-  border: 2px solid currentColor; border-radius: calc(var(--w) * .08);
-  display: flex; align-items: flex-end; justify-content: center;
-  background: color-mix(in srgb, currentColor 9%, transparent);
+  width: 60%; height: 64%;
+  border: 1px solid rgba(0, 0, 0, .55); border-radius: calc(var(--w) * .06);
+  display: flex; align-items: center; justify-content: center;
+  background: #fff;
   overflow: hidden;
 }
-.card .face svg { width: 100%; height: 100%; display: block; }
+.card .face img { width: 100%; height: 100%; display: block; object-fit: cover; }
+.av img { width: 100%; height: 100%; display: block; object-fit: cover; border-radius: 50%; }
 .card.sH { color: var(--red); }
 .card.sD { color: var(--blue); }
 .card.sC { color: var(--green); }
@@ -803,3 +804,7 @@ details[open] > summary .chev { transform: rotate(180deg); }
   border-radius: 50%; background: radial-gradient(circle at 35% 30%, #fff3b0, #ffc84a 45%, #c8901f 100%);
   box-shadow: inset 0 0 0 .08em #a8741a;
 }
+
+/* stoelen in de lobby: past ook met lange namen op een smal scherm */
+.seat { gap: 8px; }
+.seat .mini { padding: 6px 9px; font-size: 13px; }

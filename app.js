@@ -317,29 +317,25 @@
 
   // ---------- bouwstenen ----------
 
-  // Getekende plaatjes in de kleur van de kaart (currentColor): boer, vrouw, heer.
-  const SKIN = '#f6dcc0', GOLD = '#e8b33a';
-  const FIGURES = {
-    J: `<svg viewBox="0 0 40 52" aria-hidden="true"><path d="M10 16 Q11 6 21 7 Q31 7 31 14 Q26 12 22 13 Q16 14 10 16Z" fill="currentColor"/>` +
-      `<circle cx="20" cy="20" r="6.5" fill="${SKIN}" stroke="currentColor" stroke-width="1.2"/>` +
-      `<path d="M13 28 L27 28 L25 31.5 L15 31.5Z" fill="#fff" stroke="currentColor" stroke-width="1"/>` +
-      `<path d="M8 51 Q9 34 20 31.5 Q31 34 32 51Z" fill="currentColor"/>` +
-      `<circle cx="20" cy="38" r="1.6" fill="#fff"/><circle cx="20" cy="44.5" r="1.6" fill="#fff"/></svg>`,
-    Q: `<svg viewBox="0 0 40 52" aria-hidden="true"><path d="M11.5 27 Q10 11 20 11 Q30 11 28.5 27 Q26.5 22 26 18 L14 18 Q13.5 22 11.5 27Z" fill="currentColor"/>` +
-      `<path d="M14 12 L15.5 6 L20 9.5 L24.5 6 L26 12Z" fill="${GOLD}" stroke="currentColor" stroke-width="1.1" stroke-linejoin="round"/>` +
-      `<circle cx="20" cy="20" r="6" fill="${SKIN}" stroke="currentColor" stroke-width="1.2"/>` +
-      `<path d="M8 51 Q9 33 20 29.5 Q31 33 32 51Z" fill="currentColor"/>` +
-      `<path d="M13.5 36 Q20 41.5 26.5 36" stroke="#fff" stroke-width="1.6" fill="none"/></svg>`,
-    K: `<svg viewBox="0 0 40 52" aria-hidden="true"><path d="M10 14 L12.5 5 L16.5 10 L20 3.5 L23.5 10 L27.5 5 L30 14Z" fill="${GOLD}" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/>` +
-      `<circle cx="20" cy="20" r="6.5" fill="${SKIN}" stroke="currentColor" stroke-width="1.2"/>` +
-      `<path d="M13.5 21 Q20 34 26.5 21 Q25 28.5 20 29.5 Q15 28.5 13.5 21Z" fill="currentColor"/>` +
-      `<path d="M7 51 Q8 34 20 30.5 Q32 34 33 51Z" fill="currentColor"/>` +
-      `<path d="M20 32 L20 51" stroke="#fff" stroke-width="1.6"/></svg>`,
-  };
+  // Klassieke kaartfiguren voor boer, vrouw en heer (Byron Knoll, publiek domein).
+  const FIGURE_RANKS = ['J', 'Q', 'K'];
+
+  // Avatars: Notionists-gezichten voor spelers (CC0) en Bottts-robots voor bots,
+  // allebei via DiceBear en meegeleverd in de map avatars/.
+  const AVATAR_COUNT = 24;
+  const BOT_AVATARS = ['robin', 'sebastiaan', 'martijn'];
+  function avatarSrc(p) {
+    const name = (p && p.name ? p.name : '').trim().toLowerCase();
+    if (p && p.bot) return `avatars/bot-${BOT_AVATARS.includes(name) ? name : 'bot'}.webp`;
+    let h = 0;
+    for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0; // vast gezicht per naam
+    return `avatars/p${(h % AVATAR_COUNT) + 1}.webp`;
+  }
+  const avatarImg = p => `<img src="${avatarSrc(p)}" alt="">`;
 
   function cardHTML(c, cls = '', attrs = '') {
     const r = rankOf(c), s = suitOf(c), label = RL[r] || r;
-    const center = FIGURES[r] ? `<span class="face">${FIGURES[r]}</span>` : SYM[s];
+    const center = FIGURE_RANKS.includes(r) ? `<span class="face"><img src="cards/${r}${s}.jpg" alt=""></span>` : SYM[s];
     return `<div class="card s${s} ${cls}" ${attrs} aria-label="${SUIT_NAME[s]} ${label}">` +
       `<div class="ci"><b>${label}</b><i>${SYM[s]}</i></div>` +
       `<div class="cc">${center}</div>` +
@@ -444,7 +440,7 @@
           (seated ? `<button class="mini" data-act="addBot">+ Bot</button>` : '') + `</li>`;
       }
       const isMe = p.seat === S.me;
-      return `<li class="seat ${isMe ? 'me' : ''}"><span class="av">${p.bot ? '🤖' : initial(p.name)}</span>` +
+      return `<li class="seat ${isMe ? 'me' : ''}"><span class="av">${avatarImg(p)}</span>` +
         `<span class="nm">${esc(p.name)}${isMe ? ' <em>(jij)</em>' : ''}</span>` +
         (p.wins ? `<span class="wins" title="Gewonnen potjes">🏆 ${p.wins}</span>` : '') +
         (p.bot
@@ -606,7 +602,7 @@
     const look = p.look || { back: 'rood', ring: 'geen' };
     const backs = Array.from({ length: p.cards }, () => `<i class="mback b-${look.back}"></i>`).join('');
     return `<div class="opp ${p.acting ? 'acting' : ''} ${p.folded ? 'folded' : ''} ${p.dead ? 'dead' : ''}" data-seat="${p.seat}">
-      <div class="av r-${look.ring}">${p.bot ? '🤖' : initial(p.name)}${p.online ? '' : '<span class="off" title="Offline">!</span>'}</div>
+      <div class="av r-${look.ring}">${avatarImg(p)}${p.online ? '' : '<span class="off" title="Offline">!</span>'}</div>
       <div class="ob">
         <div class="nm">${esc(p.name)}</div>
         ${lives(p)}
@@ -819,7 +815,7 @@
     const chip = ['play', 'toep', 'scherp', 'blindResp'].includes(S.phase) || p.dead || p.folded ? statusChip(p) : null;
     const inPlay = ['play', 'toep', 'trickEnd'].includes(S.phase) && !p.folded && !p.dead;
     $('#mebar').className = 'mebar' + (p.acting ? ' acting' : '');
-    $('#mebar').innerHTML = `<span class="av r-${wallet.equip.ring}">${initial(p.name)}</span><span class="nm">${esc(p.name)}</span>` +
+    $('#mebar').innerHTML = `<span class="av r-${wallet.equip.ring}">${avatarImg(p)}</span><span class="nm">${esc(p.name)}</span>` +
       (chip ? `<span class="chip ${chip.cls}">${chip.t}</span>` : '') +
       (inPlay && S.myExtra ? `<span class="chip hot">jij: ${S.stake + S.myExtra}</span>` : '') +
       (hasLives() ? `<span class="pts">${lives(p)} ${p.points}/${S.settings.maxPoints}</span>`
@@ -889,7 +885,7 @@
       if (!result) note = `🏆 ${p.wins}× gewonnen` + (p.dead ? ' · af' : '');
       const isWin = result ? result.winner === p.seat : S.winner === p.seat;
       return { p, html: `<li class="${isWin ? 'win' : ''} ${p.dead ? 'out' : ''}">` +
-        `<span class="av">${p.bot ? '🤖' : initial(p.name)}</span>` +
+        `<span class="av">${avatarImg(p)}</span>` +
         `<span class="nm">${esc(p.name)}${p.seat === S.me ? ' (jij)' : ''}${note ? `<small>${note}</small>` : ''}</span>` +
         (hasLives() ? `${tally(p.points, max)}<span class="pts">${p.points}/${max}</span>` : '') +
         (result ? `<span class="delta ${dcls}">${delta}</span>` : '') + `</li>` };
@@ -1236,7 +1232,7 @@
 
   function previewHTML(cat, item) {
     if (cat === 'back') return `<div class="card back b-${item.id}" style="--w:40px"></div>`;
-    if (cat === 'ring') return `<span class="av r-${item.id}">${initial((S && meP() || {}).name || store('toep_name') || 'J')}</span>`;
+    if (cat === 'ring') return `<span class="av r-${item.id}">${avatarImg((S && meP()) || { name: store('toep_name') || '' })}</span>`;
     if (cat === 'felt') return `<div class="felt-swatch f-${item.id}"></div>`;
     return `<span class="fx-icon">${{ geen: '·', confetti: '🎉', vuurwerk: '🎆' }[item.id]}</span>`;
   }

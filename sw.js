@@ -4,7 +4,7 @@
  * meteen binnenkomt), en alleen als dat niet lukt of te lang duurt de
  * opgeslagen versie gebruiken. Verbinden met een kamer heeft wel internet nodig.
  */
-const CACHE = 'toepen-v1';
+const CACHE = 'toepen-v2';
 const FILES = [
   './', 'index.html', 'style.css', 'app.js', 'game.js', 'manifest.webmanifest',
   'vendor/peerjs.min.js', 'vendor/qrcode.min.js', 'fonts/fredoka.woff2', 'fonts/nunito.woff2',
@@ -32,7 +32,8 @@ self.addEventListener('fetch', e => {
 
 async function networkFirst(req) {
   const cache = await caches.open(CACHE);
-  const network = fetch(req).then(res => {
+  // Altijd bij de server navragen of er een nieuwere versie is (geen verouderde browsercache).
+  const network = fetch(req.url, { cache: 'no-cache', credentials: 'same-origin' }).then(res => {
     if (res.ok) cache.put(req, res.clone());
     return res;
   });
