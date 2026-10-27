@@ -783,6 +783,7 @@
         const sub = S.trickNo === S.tricksTotal ? '<small>Laatste slag, deze telt!</small>'
           : S.final ? '<small>Finale: geen toepen, de laatste slag beslist.</small>'
           : S.toepBlocked ? `<small>${esc(S.toepBlocked)}</small>`
+          : S.lastToeper === me && S.blind && S.blind.by === me ? '<small>Je speelde blind: weer toepen kan pas als iemand anders heeft getoept.</small>'
           : S.lastToeper === me ? '<small>Je toepte als laatste, nu even niet.</small>'
           : selected ? '' : '<small>Tik een kaart aan om te spelen.</small>';
         let btns = '';
