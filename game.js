@@ -32,9 +32,11 @@
   };
   const MAX_BLINDS = 2;        // per speler per potje
   const BLIND_AMOUNTS = [2, 3, 4];
+  const BLIND_FOLD = 1;        // strafpunt als je bij blind meteen weggaat, zonder te kijken
   const SEEN_FOLD = 2;         // strafpunten als je na 'gezien' weggaat
 
   const ROUND_PAUSE = 10;      // seconden tussen rondes
+  const BUY_IN_PAUSE = 30;     // seconden om te beslissen of je je inkoopt
   const TRICK_PAUSE = 1.4;     // seconden dat een volle slag blijft liggen
   const LAST_TRICK_PAUSE = 1.8;
 
@@ -146,7 +148,8 @@
   // Alles wat nodig is om een spel na een herlaadactie van de host te hervatten.
   const STATE_KEYS = ['seats', 'settings', 'logs', 'logSeq', 'botSeq', 'gamesPlayed', 'phase', 'round', 'stake',
     'trick', 'trickNo', 'tricksTotal', 'turn', 'leader', 'lastToeper', 'toep', 'blind', 'scherp', 'final',
-    'washCheck', 'washQueue', 'result', 'trickWinner', 'winner', 'nextRoundAt', 'deck', 'roundPlayed', 'voids'];
+    'washCheck', 'washQueue', 'result', 'trickWinner', 'winner', 'nextRoundAt', 'deck', 'roundPlayed', 'voids',
+    'tricks', 'prevTricks', 'buyIn', 'buyIns', 'anyDied'];
 
   class Table {
     constructor({ onChange = () => {}, isConnected = () => true, delay = 1, hostPid = null } = {}) {
@@ -241,7 +244,9 @@
       // Lopende pauzes opnieuw starten.
       if (this.phase === 'trickEnd') this.after(TRICK_PAUSE, () => this.finishTrick());
       if (this.phase === 'roundEnd') {
-        this.after(Math.max(1, (this.nextRoundAt - Date.now()) / 1000 / this.delay), () => this.startRound());
+        const left = Math.max(1, (this.nextRoundAt - Date.now()) / 1000 / this.delay);
+        if (this.buyIn) this.after(left, () => this.doBuyIn(this.seats[this.buyIn.seat], false));
+        else this.after(left, () => this.startRound());
       }
     }
 
@@ -274,8 +279,10 @@
           case 'toep': this.doToep(p, msg.amount === 2 ? 2 : 1); break;
           case 'toepResponse': this.doToepResponse(p, !!msg.go); break;
           case 'play': this.doPlay(p, msg.card); break;
+          case 'buyIn': this.doBuyIn(p, !!msg.yes); break;
           case 'next':
             if (this.phase !== 'roundEnd') fail('De ronde is nog bezig.');
+            if (this.buyIn) fail(`Even wachten: ${this.seats[this.buyIn.seat].name} mag zich nog inkopen.`);
             this.startRound();
             break;
           case 'lobby':
@@ -302,6 +309,7 @@
         phase: 'lobby', round: 0, stake: 1, trick: [], trickNo: 0, tricksTotal: 4, turn: -1, leader: -1,
         lastToeper: -1, toep: null, blind: null, scherp: null, final: false, washCheck: null, washQueue: [],
         result: null, trickWinner: -1, winner: -1, nextRoundAt: 0, deck: [], roundPlayed: [], voids: {},
+        tricks: [], prevTricks: [], buyIn: null, buyIns: 0, anyDied: false,
       });
       for (const p of this.seated()) {
         p.points = 0;
@@ -425,6 +433,9 @@
         p.stats = newStats();
       }
       this.round = 0;
+      this.buyIn = null;
+      this.buyIns = 0;
+      this.anyDied = false;
       this.leader = choice(this.seated()).seat;
       this.log('Het spel begint!', 'quiet');
       this.startRound();
@@ -439,6 +450,7 @@
         deck: shuffle([...FULL_DECK]), stake: 1, trick: [], trickNo: 1, turn: -1, lastToeper: -1,
         toep: null, blind: null, scherp: null, washCheck: null, washQueue: [], result: null,
         trickWinner: -1, roundPlayed: [], voids: { 0: [], 1: [], 2: [], 3: [] },
+        prevTricks: this.tricks || [], tricks: [],
       });
 
       const alive = this.alive();
@@ -523,7 +535,13 @@
         b.resp[p.seat] = 'seen';
         return;
       }
-      if (choiceName === 'blind' && r === null) {
+      if (choiceName === 'weg' && r === null) {
+        p.blindResp = 'weg';
+        p.folded = true;
+        p.foldPenalty = BLIND_FOLD; // zonder kijken weg kost 1
+        p.stats.folds++;
+        this.log(`${p.name} gaat weg zonder te kijken (${pointsText(BLIND_FOLD)})`, 'fold');
+      } else if (choiceName === 'blind' && r === null) {
         p.blindResp = 'blind';
         this.log(`${p.name} gaat blind mee`, 'quiet');
       } else if (choiceName === 'mee' && r === 'seen') {
@@ -708,6 +726,8 @@
 
     resolveTrick() {
       this.trickWinner = this.trickWinnerSeat();
+      // Bewaren om terug te kijken, zoals je in de kroeg de opgegooide kaarten ziet liggen.
+      this.tricks.push({ no: this.trickNo, cards: [...this.trick], winner: this.trickWinner });
       this.phase = 'trickEnd';
       const last = this.trickNo >= this.tricksTotal;
       this.after(last ? LAST_TRICK_PAUSE : TRICK_PAUSE, () => this.finishTrick());
@@ -832,23 +852,66 @@
       };
       const what = this.final ? 'de finale' : `ronde ${this.round}`;
       this.log(`${winner.name} wint ${what}${byFold ? ' (de rest ging weg)' : ''}`, 'round');
-      this.checkDeaths();
+      const firstDeath = !this.anyDied;
+      const died = this.checkDeaths();
       // De volgende ronde begint de speler links van de winnaar.
       this.leader = this.nextSeat(w, q => !q.dead);
+      this.buyIn = firstDeath ? this.buyInOffer(died) : null;
+      if (this.buyIn) {
+        const p = this.seats[this.buyIn.seat];
+        this.log(`${p.name} mag zich inkopen op ${pointsText(this.buyIn.points)}`, 'quiet');
+        this.phase = 'roundEnd';
+        this.nextRoundAt = Date.now() + BUY_IN_PAUSE * 1000 * this.delay;
+        this.after(BUY_IN_PAUSE, () => this.doBuyIn(p, false));
+        return;
+      }
+      this.continueAfterRound();
+    }
+
+    continueAfterRound() {
       if (this.alive().length <= 1) return this.endGame();
       this.phase = 'roundEnd';
       this.nextRoundAt = Date.now() + ROUND_PAUSE * 1000 * this.delay;
       this.after(ROUND_PAUSE, () => this.startRound());
     }
 
+    // Inkopen: wie als eerste af is, mag direct terugkomen op de stand van de
+    // hoogste speler. Niet als er nog iemand anders op het randje staat, en niet
+    // als er tegelijk meerdere spelers af gingen. Bots kopen zich niet in.
+    buyInOffer(died) {
+      if (this.finaleMode || died.length !== 1 || died[0].bot) return null;
+      const alive = this.alive();
+      if (!alive.length || alive.some(q => q.points === this.edge)) return null;
+      return { seat: died[0].seat, points: Math.max(...alive.map(q => q.points)) };
+    }
+
+    doBuyIn(p, yes) {
+      const b = this.buyIn;
+      if (this.phase !== 'roundEnd' || !b || b.seat !== p.seat) fail('Inkopen kan nu niet.');
+      this.cancelAfter();
+      this.buyIn = null;
+      if (yes) {
+        p.dead = false;
+        p.points = b.points;
+        this.buyIns++;
+        this.log(`${p.name} koopt zich in en staat op ${pointsText(b.points)}`, 'round');
+        if (this.result) this.leader = this.nextSeat(this.result.winner, q => !q.dead);
+      }
+      this.continueAfterRound();
+    }
+
     checkDeaths() {
+      const died = [];
       for (const p of this.alive()) {
         if (p.points >= this.settings.maxPoints) {
           p.dead = true;
+          this.anyDied = true;
+          died.push(p);
           p.hand = [];
           this.log(`${p.name} is af!`, 'dead');
         }
       }
+      return died;
     }
 
     endGame(winnerSeat) {
@@ -1069,11 +1132,19 @@
     botBlindResp(p) {
       const n = this.blind.amount;
       if (p.blindResp === 'seen') return this.botGo(p, SEEN_FOLD, n + 1) ? 'mee' : 'weg';
-      if (p.points + SEEN_FOLD >= this.settings.maxPoints) return 'blind'; // weg is toch af
-      if (p.level === 'god') return this.botWinChance(p, 80) > 0.2 ? 'blind' : 'seen';
-      if (p.level === 'makkelijk') return choice(['blind', 'seen']);
-      if (p.level === 'gemiddeld') return Math.random() < 0.3 ? 'blind' : 'seen';
-      return 'seen';
+      const mx = this.settings.maxPoints;
+      if (p.points + BLIND_FOLD >= mx) return 'blind'; // weg is toch af
+      if (p.level === 'god') {
+        const w = this.botWinChance(p, 80);
+        return w > 0.2 ? 'blind' : w > 1 - SEEN_FOLD / (n + 1) - 0.05 ? 'seen' : 'weg';
+      }
+      if (p.level === 'makkelijk') return choice(['blind', 'seen', 'weg']);
+      // Zonder te kijken is je kans ongeveer 1 op het aantal spelers: bij een hoog
+      // bedrag tegen veel spelers is meteen weg (1 punt) vaak het goedkoopst.
+      const cheapFold = n >= 3 && this.active().length >= 3;
+      if (p.points + SEEN_FOLD >= mx) return cheapFold ? 'weg' : 'blind';
+      if (p.level === 'gemiddeld') return Math.random() < 0.3 ? 'blind' : cheapFold && Math.random() < 0.4 ? 'weg' : 'seen';
+      return cheapFold && n >= 4 ? 'weg' : 'seen';
     }
 
     botAct(p) {
@@ -1139,6 +1210,8 @@
         isHost: !!me && (!this.hostPid || me.id === this.hostPid),
         players: this.seats.map(p => this.playerView(p)),
         trick: this.trick, trickWinner: this.trickWinner,
+        tricks: this.tricks || [], prevTricks: this.prevTricks || [],
+        buyIn: this.buyIn || null, buyIns: this.buyIns || 0,
         toep: this.toep, blind: this.blind, scherp: this.scherp,
         washCheck: this.washCheck ? { seat: this.washCheck.seat, pending: this.washCheck.pending } : null,
         result: this.result,

@@ -406,6 +406,7 @@
     if (inGame) renderGame(); else renderLobby();
     renderOverlay();
     renderDrawer();
+    renderHistory();
     handleLogs();
     handleReactions();
     syncLook();
@@ -715,8 +716,9 @@
         return {
           tone: 'alert',
           html: `<div class="pt"><b>${esc(nameOf(b.by))}</b> speelt blind voor ${n}!` +
-            `<small>Blind mee = ${n}. Gezien = je kijkt eerst, dan mee voor ${n + 1} of weg voor 2.</small></div>` +
-            `<div class="pb"><button class="btn ghost" data-act="blindResp" data-choice="seen">Gezien</button>` +
+            `<small>Weg = 1 punt, zonder te kijken. Gezien = je kijkt eerst, dan mee voor ${n + 1} of weg voor 2. Blind mee = ${n}.</small></div>` +
+            `<div class="pb"><button class="btn ghost" data-act="blindResp" data-choice="weg">Weg (1)</button>` +
+            `<button class="btn ghost" data-act="blindResp" data-choice="seen">Gezien</button>` +
             `<button class="btn primary" data-act="blindResp" data-choice="blind">Blind mee (${n})</button></div>`,
         };
       }
@@ -927,20 +929,32 @@
     return `<ul class="standings">${rows.map(r => r.html).join('')}</ul>`;
   }
 
+  // Wie als eerste af is, mag zich direct weer inkopen voor muntjes.
+  function buyInHTML(b) {
+    if (b.seat !== S.me) {
+      return `<p class="buyin"><b>${esc(nameOf(b.seat))}</b> is af en mag zich inkopen op ${b.points}. Even wachten <span id="cd"></span></p>`;
+    }
+    const short = wallet.coins < BUY_IN_COINS;
+    return `<div class="buyin mine"><b>Je bent af!</b> Koop je in voor <i class="coin"></i>${BUY_IN_COINS} en speel verder op <b>${b.points}</b> punten.` +
+      `<small>${short ? `Je hebt maar ${wallet.coins} muntjes.` : `Je hebt ${wallet.coins} muntjes. De winnaar krijgt ${BUY_IN_BONUS} extra.`}</small></div>` +
+      `<div class="btns"><button class="btn primary big" data-act="buyIn" data-yes="1"${short ? ' disabled' : ''}>Inkopen <span id="cd"></span></button>` +
+      `<button class="btn dark" data-act="buyIn" data-yes="0">Nee, ik ben af</button></div>`;
+  }
+
   function renderOverlay() {
     const o = $('#overlay');
     let key = '', html = '';
     if (S.phase === 'roundEnd' && S.result) {
       const r = S.result;
-      key = `round-${S.round}`;
+      key = `round-${S.round}-${S.buyIn ? S.buyIn.seat : ''}`;
       const w = r.winner === S.me ? `Jij wint de ${r.final ? 'finale' : 'ronde'}!` : `${esc(nameOf(r.winner))} wint${r.final ? ' de finale' : ''}!`;
       const bits = [r.byFold ? 'De rest ging weg' : `Inzet ${r.stake}`];
       if (r.blind) bits.push(`blind ${r.blind}`);
       if (r.boer) bits.push('<b>Boerenslag! +1</b>');
       if (r.comeback) bits.push('<b>Comeback! −1</b>');
       html = `<div class="sheet"><div class="kicker">Ronde ${S.round}</div><h2>${w}</h2><p class="sub">${bits.join(' · ')}</p>` +
-        standingsHTML(r) +
-        `<div class="btns"><button class="btn primary big" data-act="next">Volgende ronde <span id="cd"></span></button></div></div>`;
+        standingsHTML(r) + (S.buyIn ? buyInHTML(S.buyIn) :
+        `<div class="btns"><button class="btn primary big" data-act="next">Volgende ronde <span id="cd"></span></button></div>`) + `</div>`;
       if (overlayKey !== key) roundDeadline = Date.now() + S.nextRoundIn;
     } else if (S.phase === 'gameEnd') {
       key = `game-${S.round}`;
@@ -1201,6 +1215,8 @@
   const START_COINS = 100;
   const WIN_COINS = 100;     // gewonnen potje met minstens één andere echte speler
   const BOT_WIN_COINS = 25;  // gewonnen van alleen bots
+  const BUY_IN_COINS = 50;   // jezelf weer inkopen als je als eerste af bent
+  const BUY_IN_BONUS = 25;   // extra voor de winnaar als iemand zich heeft ingekocht
 
   function loadWallet() {
     let w = null;
@@ -1222,7 +1238,7 @@
     const key = `${S.room || ''}|${S.gamesPlayed}`;
     if (wallet.lastAward === key) return { amount: wallet.lastAmount, fresh: false };
     const humans = S.players.filter(p => p && !p.bot).length;
-    const amount = humans >= 2 ? WIN_COINS : BOT_WIN_COINS;
+    const amount = (humans >= 2 ? WIN_COINS : BOT_WIN_COINS) + (S.buyIns ? BUY_IN_BONUS : 0);
     wallet.coins += amount;
     wallet.lastAward = key;
     wallet.lastAmount = amount;
@@ -1297,6 +1313,24 @@
     el.innerHTML = `<div class="sheet shop-sheet"><div class="shop-head"><h2>Shop</h2><span class="coins"><i class="coin"></i>${wallet.coins}</span>` +
       `<button class="iconbtn" data-act="closeShop" aria-label="Sluiten">✕</button></div>` +
       `<p class="sub">Win een potje voor ${WIN_COINS} muntjes (${BOT_WIN_COINS} als je alleen van bots wint).</p>${cats}</div>`;
+  }
+
+  // Gespeelde slagen terugkijken: deze ronde, en de vorige ronde.
+  let historyPrev = false;
+  function renderHistory() {
+    const el = $('#history');
+    if (el.hidden || !S) return;
+    const cur = S.tricks || [], prev = S.prevTricks || [];
+    if (!cur.length && prev.length && !historyPrev && S.phase !== 'roundEnd') historyPrev = true;
+    const list = historyPrev ? prev : cur;
+    const tabs = `<div class="hist-tabs"><button class="btn mini-btn ${historyPrev ? 'ghost' : 'primary'}" data-act="historyTab" data-prev="0">Deze ronde</button>` +
+      `<button class="btn mini-btn ${historyPrev ? 'primary' : 'ghost'}" data-act="historyTab" data-prev="1"${prev.length ? '' : ' disabled'}>Vorige ronde</button></div>`;
+    const body = list.length ? [...list].reverse().map(t =>
+      `<section class="hist-trick"><h3>Slag ${t.no}<small>${esc(nameOf(t.winner))} pakt hem</small></h3><div class="hist-cards">${
+        t.cards.map(x => `<div class="hist-card${x.seat === t.winner ? ' win' : ''}">${cardHTML(x.card)}<span>${esc(nameOf(x.seat))}</span></div>`).join('')}</div></section>`).join('')
+      : '<p class="sub">Nog geen slagen gespeeld.</p>';
+    el.innerHTML = `<div class="sheet shop-sheet"><div class="shop-head"><h2>Gespeelde slagen</h2>` +
+      `<button class="iconbtn" data-act="closeHistory" aria-label="Sluiten">✕</button></div>${tabs}${body}</div>`;
   }
 
   function openShop() {
@@ -1439,7 +1473,25 @@
         store('toep_sound', prefs.sound ? '1' : '0');
         renderPrefs();
         return play('pop');
+      case 'buyIn':
+        if (d.yes !== '1') return act('buyIn', { yes: false });
+        if (wallet.coins < BUY_IN_COINS) return toast('Je hebt te weinig muntjes.', 'err');
+        return send('buyIn', { yes: true }).then(ok => {
+          if (!ok) return;
+          wallet.coins -= BUY_IN_COINS;
+          saveWallet();
+          toast(`Ingekocht! −${BUY_IN_COINS} muntjes`, 'coins');
+          play('coin');
+        });
       case 'openShop': return openShop();
+      case 'openHistory':
+        historyPrev = false;
+        $('#history').hidden = false;
+        return renderHistory();
+      case 'historyTab':
+        historyPrev = d.prev === '1';
+        return renderHistory();
+      case 'closeHistory': $('#history').hidden = true; return undefined;
       case 'closeShop': $('#shop').hidden = true; return undefined;
       case 'buy': return buy(d.cat, d.id);
       case 'equip': return equip(d.cat, d.id);

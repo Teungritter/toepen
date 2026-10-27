@@ -24,7 +24,8 @@ Zie het ☰-menu in het spel. Kort:
 - Kleur bekennen. Alleen de laatste slag telt.
 - Toepen = inzet +1; de anderen kiezen om de beurt (met de klok mee) mee of passen (passen kost de oude inzet).
 - De speler links van de rondewinnaar begint de volgende ronde.
-- Blind: vóór iemand kijkt mag je blind spelen voor 2, 3 of 4 punten (max. 2× per speler per potje). Anderen kiezen om de beurt: blind mee (= het bedrag) of gezien (kijken, dan mee voor +1 of weg voor 2). Blind telt als een toep: de blindspeler mag pas weer toepen nadat iemand anders heeft getoept.
+- Inkopen: wie als eerste af is, mag zich direct inkopen voor 50 muntjes en komt op de stand van de hoogste speler. Niet als iemand anders op 14 staat, niet als er al iemand af is en niet een ronde later. Maar 1× per potje. De winnaar krijgt dan 25 muntjes extra.
+- Blind: vóór iemand kijkt mag je blind spelen voor 2, 3 of 4 punten (max. 2× per speler per potje). Anderen kiezen om de beurt: meteen weg (1 punt, zonder te kijken), gezien (kijken, dan mee voor +1 of weg voor 2) of blind mee (= het bedrag). Blind telt als een toep: de blindspeler mag pas weer toepen nadat iemand anders heeft getoept.
 - Af bij 15 strafpunten (10 kan ook); je eindigt nooit boven de 15. Laatste overlevende wint.
 - Op scherp: wie op 14 staat moet genomen worden en mag beginnen. Iedereen kijkt; mee = 2 punten, weg = 1. Geen blind.
 - Zolang iemand op 14 meedoet, kan niemand toepen.
