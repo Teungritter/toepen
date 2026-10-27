@@ -24,7 +24,7 @@
     <h1 class="logo">Toepen<span>!</span></h1>
     <p class="tag">Het kroegspel voor 2 tot 4, gewoon op je telefoon</p>
   </header>
-  <p id="homeBusy" class="panel busy" hidden></p>
+  <div id="homeBusy" class="panel busy" hidden></div>
   <form id="homeForm" class="panel home">
     <label for="homeName">Hoe heet je?</label>
     <input id="homeName" class="field" maxlength="14" autocomplete="nickname" placeholder="Je naam">
@@ -127,6 +127,7 @@
     <div id="drawerTheme"></div>
 
     <h3 class="menu-h">Kamer</h3>
+    <div id="connList"></div>
     <div id="drawerActions" class="drawer-actions"></div>
 
     <details id="rulesBox" class="rules-box">
@@ -173,7 +174,7 @@
 
 <div id="toasts" class="toasts" aria-live="polite"></div>
 <div id="bubbles" class="bubbles" aria-hidden="true"></div>
-<div id="conn" class="conn" hidden>Verbinding kwijt… opnieuw verbinden</div>
+<div id="conn" class="conn" hidden><span id="connText">Verbinding kwijt… opnieuw verbinden</span> <button class="conn-stop" type="button" data-act="stopConnect">Stoppen</button></div>
 
 <script src="vendor/qrcode.min.js" defer></script>
 <script src="game.js" defer></script>

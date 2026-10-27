@@ -73,6 +73,7 @@
   function setState(view) {
     S = view;
     $('#conn').hidden = true;
+    $('#connText').textContent = 'Verbinding kwijt… opnieuw verbinden';
     render();
   }
 
@@ -92,8 +93,51 @@
   const newCode = () => Array.from({ length: 4 }, () => CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)]).join('');
   const joinUrl = () => `${location.origin}${location.pathname}?kamer=${net.room}`;
 
+  // Hoe elke gast verbonden is: zelfde wifi, direct via internet of via een
+  // relay-server (omweg, vaak trager), plus de pingtijd in milliseconden.
+  async function linkType(pc) {
+    if (!pc || !pc.getStats) return null;
+    try {
+      const stats = await pc.getStats();
+      let pair = null;
+      stats.forEach(r => { if (r.type === 'transport' && r.selectedCandidatePairId) pair = stats.get(r.selectedCandidatePairId); });
+      if (!pair) stats.forEach(r => { if (!pair && r.type === 'candidate-pair' && r.state === 'succeeded' && (r.nominated || r.selected)) pair = r; });
+      if (!pair) return null;
+      const types = [stats.get(pair.localCandidateId), stats.get(pair.remoteCandidateId)].map(c => c && c.candidateType);
+      if (types.includes('relay')) return 'relay';
+      return types.every(t => t === 'host') ? 'lokaal' : 'direct';
+    } catch (e) { return null; }
+  }
+
+  function linksBySeat() {
+    const out = {};
+    for (const c of net.conns.values()) {
+      const p = c.pid && net.table.byPid(c.pid);
+      if (p && c.link) out[p.seat] = c.link;
+    }
+    return out;
+  }
+
+  // Elke 5 seconden: ping naar elke gast en kijken welk soort verbinding het is.
+  function measureLinks() {
+    for (const c of net.conns.values()) {
+      if (!c.pid || !c.conn.open) continue;
+      c.conn.send({ t: 'ping', ts: Date.now() });
+      linkType(c.conn.peerConnection).then(type => { if (type) c.type = type; });
+    }
+  }
+
+  function onPong(c, msg) {
+    const rtt = Math.max(1, Date.now() - msg.ts);
+    const prev = c.link;
+    c.link = { type: c.type || 'direct', rtt };
+    // Alleen opnieuw versturen als er echt iets veranderd is.
+    if (!prev || prev.type !== c.link.type || Math.abs(prev.rtt - rtt) > Math.max(30, prev.rtt * 0.3)) hostBroadcast();
+  }
+
   function hostBroadcast() {
-    const extra = { room: net.room, urls: [joinUrl()], host: true };
+    const extra = { room: net.room, urls: [joinUrl()], host: true, links: linksBySeat(),
+      hostSeat: (net.table.byPid(pid) || {}).seat };
     for (const c of net.conns.values()) {
       if (c.pid && c.conn.open) c.conn.send({ t: 'state', s: net.table.view(c.pid, { ...extra, host: false }) });
     }
@@ -107,6 +151,9 @@
     if (msg.t === 'hello') {
       c.pid = String(msg.pid);
       hostBroadcast();
+      setTimeout(measureLinks, 1500);
+    } else if (msg.t === 'pong') {
+      onPong(c, msg);
     } else if (msg.t === 'act' && c.pid) {
       let res = { t: 'ack', id: msg.id, ok: true };
       try {
@@ -132,6 +179,8 @@
     showHome('Kamer openen…');
     const peer = new window.Peer(PEER_PREFIX + net.room);
     net.peer = peer;
+    clearInterval(net.linkTimer);
+    net.linkTimer = setInterval(measureLinks, 5000);
     peer.on('open', () => {
       if (!resume) net.table.handle(pid, { type: 'join', name });
       else net.table.changed();
@@ -157,31 +206,60 @@
     });
   }
 
-  function joinRoom(code, name) {
+  // Lukt verbinden niet binnen 10 seconden, dan opnieuw proberen met een melding.
+  const CONNECT_TIMEOUT = 10000;
+
+  function retryNotice(attempt) {
+    const text = `Verbinden lukt niet, opnieuw proberen (poging ${attempt})…`;
+    if (S) { $('#connText').textContent = text; $('#conn').hidden = false; } else showHome(text, true);
+  }
+
+  function joinRoom(code, name, attempt = 1) {
     net.role = 'guest';
     net.room = code;
     store('toep_role', 'guest');
     store('toep_room', code);
-    showHome(`Verbinden met kamer ${code}…`);
+    if (attempt > 1) retryNotice(attempt);
+    else if (!S) showHome(`Verbinden met kamer ${code}…`);
     const peer = new window.Peer();
     net.peer = peer;
+    net.attempt = attempt;
     let pendingName = name;
+    // De kamerserver (voor het vinden van de host) reageert niet: alles opnieuw.
+    clearTimeout(net.openTimer);
+    net.openTimer = setTimeout(() => {
+      if (peer.open || peer.destroyed || net.peer !== peer) return;
+      peer.destroy();
+      joinRoom(code, pendingName, attempt + 1);
+    }, CONNECT_TIMEOUT);
     const connectHost = () => {
+      if (net.hostConn && !net.hostConn.open) { net.hostConn.abandoned = true; try { net.hostConn.close(); } catch (e) { /* al dicht */ } }
       const conn = peer.connect(PEER_PREFIX + code, { reliable: true });
       net.hostConn = conn;
+      // Geen verbinding met de host binnen 10 seconden: opnieuw proberen.
+      clearTimeout(net.openTimer);
+      net.openTimer = setTimeout(() => {
+        if (conn.open || net.hostConn !== conn || peer.destroyed) return;
+        net.attempt++;
+        retryNotice(net.attempt);
+        connectHost();
+      }, CONNECT_TIMEOUT);
       conn.on('open', () => {
+        clearTimeout(net.openTimer);
+        net.attempt = 1;
         net.retry = 0;
         conn.send({ t: 'hello', pid });
         if (pendingName) { send('join', { name: pendingName }); pendingName = null; }
       });
       conn.on('data', msg => {
         if (msg.t === 'state') setState(msg.s);
+        if (msg.t === 'ping') conn.send({ t: 'pong', ts: msg.ts });
         if (msg.t === 'ack' && net.waiting.has(msg.id)) {
           net.waiting.get(msg.id)(msg);
           net.waiting.delete(msg.id);
         }
       });
-      conn.on('close', () => reconnectLater(connectHost));
+      conn.on('close', () => { if (!conn.abandoned) reconnectLater(connectHost); });
     };
     net.connectHost = connectHost;
     peer.on('open', connectHost);
@@ -198,6 +276,23 @@
         toast('Verbindingsfout: ' + (err.type || err.message), 'err');
       }
     });
+  }
+
+  // Verbinden stoppen als het niet lukt of blijft hangen. Je komt terug op het
+  // startscherm; een opgeslagen kamer kun je daar later weer oppakken.
+  function cancelConnect() {
+    clearTimeout(net.retryTimer);
+    clearTimeout(net.slowTimer);
+    clearTimeout(net.openTimer);
+    clearInterval(net.linkTimer);
+    if (net.peer) net.peer.destroy();
+    store('toep_role', '');
+    Object.assign(net, { role: null, room: null, peer: null, table: null, hostConn: null, retry: 0 });
+    net.conns.clear();
+    net.waiting.clear();
+    S = null;
+    $('#conn').hidden = true;
+    showHome();
   }
 
   function reconnectLater(fn) {
@@ -258,18 +353,23 @@
   }
 
   // Startscherm voor de telefoonversie: kamer maken of meedoen.
-  function showHome(busy) {
+  function showHome(busy, slow) {
     $('#lobby').hidden = true;
     $('#game').hidden = true;
     $('#home').hidden = false;
     $('#homeBusy').hidden = !busy;
-    $('#homeBusy').textContent = busy || '';
+    $('#homeBusy').innerHTML = busy
+      ? `<p class="busy-text">${esc(busy)}</p><p class="busy-hint" hidden>Dit duurt lang. Klopt de kamercode en is de host online? Soms helpt een ander netwerk, bijvoorbeeld 4G/5G in plaats van wifi.</p>` +
+        '<button class="btn ghost" type="button" data-act="cancelConnect">Stoppen</button>'
+      : '';
+    clearTimeout(net.slowTimer);
+    if (busy) net.slowTimer = setTimeout(() => { const h = $('#homeBusy .busy-hint'); if (h) h.hidden = false; }, slow ? 0 : 12000);
     $('#homeForm').hidden = !!busy;
     const resume = savedHost();
     const room = store('toep_room');
     const bits = [];
     if (resume) bits.push(`<button class="btn ghost" type="button" data-act="resumeHost">Kamer ${esc(resume.room)} hervatten (host)</button>`);
-    if (store('toep_role') === 'guest' && room) bits.push(`<button class="btn ghost" type="button" data-act="rejoin">Terug naar kamer ${esc(room)}</button>`);
+    if (store('toep_role') !== 'host' && room) bits.push(`<button class="btn ghost" type="button" data-act="rejoin">Terug naar kamer ${esc(room)}</button>`);
     $('#homeResume').innerHTML = bits.join('');
   }
 
@@ -1041,6 +1141,24 @@
       actions += `<button class="btn dark" data-act="leaveRoom">${label}</button>`;
     }
     $('#drawerActions').innerHTML = actions;
+    $('#connList').innerHTML = net.role ? connListHTML() : '';
+  }
+
+  const LINK_LABEL = { lokaal: 'Zelfde netwerk', direct: 'Direct', relay: 'Via relay (omweg)' };
+  function connListHTML() {
+    const links = S.links || {};
+    const rows = S.players.filter(p => p && !p.bot).map(p => {
+      let info;
+      if (p.seat === S.hostSeat) info = '<span class="link host">Host</span>';
+      else if (!p.online) info = '<span class="link slow">Geen verbinding</span>';
+      else if (!links[p.seat]) info = '<span class="link">Meten…</span>';
+      else {
+        const l = links[p.seat], speed = l.rtt < 120 ? 'good' : l.rtt < 300 ? 'ok' : 'slow';
+        info = `<span class="link ${l.type} ${speed}">${LINK_LABEL[l.type] || l.type} · ${l.rtt} ms</span>`;
+      }
+      return `<li><span>${esc(p.name)}${p.seat === S.me ? ' (jij)' : ''}</span>${info}</li>`;
+    });
+    return `<div class="menu-sub">Verbindingen</div><ul class="conn-list">${rows.join('')}</ul>`;
   }
   function openMenu() { $('#rulesBox').open = false; $('#drawer').classList.add('open'); $('#drawer').setAttribute('aria-hidden', 'false'); }
   function closeMenu() { $('#drawer').classList.remove('open'); $('#drawer').setAttribute('aria-hidden', 'true'); }
@@ -1553,6 +1671,10 @@
       }
       case 'resumeHost': return startP2P('resumeHost');
       case 'rejoin': return startP2P('rejoin');
+      case 'cancelConnect': return cancelConnect();
+      case 'stopConnect':
+        if (confirm('Stoppen met verbinden? Je gaat naar het startscherm en kunt later terug naar de kamer.')) cancelConnect();
+        return undefined;
       case 'leaveRoom': {
         const q = net.role === 'host'
           ? 'Kamer sluiten? Iedereen raakt de verbinding kwijt.'

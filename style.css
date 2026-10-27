@@ -873,3 +873,22 @@ details[open] > summary .chev { transform: rotate(180deg); }
 .buyin { margin: 14px 0 0; padding: 10px 12px; border-radius: 14px; background: var(--well); text-align: left; }
 .buyin small { display: block; margin-top: 4px; color: var(--muted); }
 .buyin.mine { box-shadow: inset 0 0 0 2px var(--gold); }
+
+/* verbinden: stoppen als het niet lukt */
+#homeBusy { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+#homeBusy[hidden] { display: none; }
+#homeBusy p { margin: 0; }
+#homeBusy .busy-hint { font-family: var(--font-body); font-size: 14px; color: inherit; opacity: .85; }
+.conn { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.conn[hidden] { display: none; }
+.conn-stop { border: 0; border-radius: 999px; padding: 4px 10px; background: rgba(255,255,255,.2); color: #fff; font: inherit; font-weight: 700; }
+
+/* verbindingen in het menu */
+.conn-list { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 6px; }
+.conn-list li { display: flex; align-items: center; justify-content: space-between; gap: 10px; font-size: 15px; }
+.conn-list li > span:first-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.link { flex: none; font-size: 13px; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: rgba(0,0,0,.12); }
+.link.good { background: #2f9e5b; color: #fff; }
+.link.ok { background: #d8962a; color: #fff; }
+.link.slow, .link.relay.ok { background: #b8382c; color: #fff; }
+.link.host { background: var(--gold); color: var(--on-gold); }
