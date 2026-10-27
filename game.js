@@ -16,6 +16,7 @@
   const FACES = ['J', 'Q', 'K', 'A'];
   const THEMES = ['cafe', 'nacht'];
   const REACTIONS = ['🍺', '👏', '😏', '😱', '😂', '🔥'];
+  const AVATAR_COUNT = 24;
   const LOOKS = {
     back: ['rood', 'blauw', 'oranje', 'ruit', 'goud', 'regenboog'],
     ring: ['geen', 'ijs', 'goud', 'vuur'],
@@ -253,6 +254,7 @@
           case 'theme': this.setTheme(pid, msg.theme); break;
           case 'react': this.react(p, msg.emoji); break;
           case 'look': this.setLook(p, msg); break;
+          case 'expert': p.expert = !!msg.on; break;
           case 'start': this.start(); break;
           case 'blind': this.doBlind(p, msg.amount || 0); break;
           case 'blindResp': this.doBlindResp(p, msg.choice); break;
@@ -359,6 +361,31 @@
     setLook(p, m) {
       if (LOOKS.back.includes(m.back)) p.look.back = m.back;
       if (LOOKS.ring.includes(m.ring)) p.look.ring = m.ring;
+      if (Number.isInteger(m.avatar) && m.avatar >= 1 && m.avatar <= AVATAR_COUNT) p.look.avatar = m.avatar;
+    }
+
+    // Expert-hulp: rekent voor deze speler uit wat slim is, met alleen wat hij zelf
+    // kan weten (net als de bot Moeilijk, dus zonder in andermans kaarten te kijken).
+    adviceFor(p) {
+      if (!p.expert || p.dead || p.folded) return null;
+      const t = this.toep, sc = this.scherp;
+      const key = [this.round, this.phase, this.trickNo, this.trick.length, this.turn, t ? t.pending.join() : '', this.stake].join('|');
+      if (p.adviceKey === key) return p.advice;
+      const me = { ...p, level: 'moeilijk' };
+      let advice = null;
+      if (this.phase === 'play' && this.turn === p.seat) {
+        const [card, chance] = this.botBestCard(me, 80);
+        advice = { type: 'play', card, chance, toep: this.canToep(p) && chance > 0.6 };
+      } else if (this.phase === 'toep' && t.pending[0] === p.seat) {
+        const prev = t.prev + p.extra, next = prev + t.amount, chance = this.botWinChance(me, 80);
+        advice = { type: 'toep', chance, go: chance > 1 - prev / next || p.points + prev >= this.settings.maxPoints };
+      } else if (this.phase === 'scherp' && sc.pending.includes(p.seat)) {
+        const chance = this.botWinChance(me, 80);
+        advice = { type: 'scherp', chance, go: chance > 0.5 };
+      }
+      p.adviceKey = key;
+      p.advice = advice;
+      return advice;
     }
 
     // Snelle reactie (emoji) die even bij je naam verschijnt.
@@ -1064,6 +1091,7 @@
           toepBlocked: ph === 'play' && this.turn === me.seat ? this.toepBlocked(me) : null,
           canDouble: canToep && !!this.rules.double && !me.doubleUsed,
           myExtra: me.extra, blindsLeft: MAX_BLINDS - me.blindsUsed,
+          myExpert: !!me.expert, advice: this.adviceFor(me),
           blindDecision: me.blindDecision, blindResp: me.blindResp,
           washDecision: me.washDecision, passCard: me.passCard, received: me.received,
           isWas: ph === 'wash' && isWas(me.hand),

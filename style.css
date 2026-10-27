@@ -714,7 +714,7 @@ details[open] > summary .chev { transform: rotate(180deg); }
 .more[open] > summary { margin-bottom: 4px; }
 .sub-h { font-size: 16px; margin: 16px 0 8px; font-weight: 600; }
 .lobby-head { position: relative; }
-.lobby-menu { position: absolute; top: 0; right: 0; }
+.lobby-menu { position: absolute; top: 0; right: 0; z-index: 3; } /* boven het logo, anders valt de tik op het logo */
 
 /* stijlkeuze */
 .themes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
@@ -808,3 +808,46 @@ details[open] > summary .chev { transform: rotate(180deg); }
 /* stoelen in de lobby: past ook met lange namen op een smal scherm */
 .seat { gap: 8px; }
 .seat .mini { padding: 6px 9px; font-size: 13px; }
+
+/* lange telefoons (19,5:9 en langer): de extra hoogte gebruiken voor grotere kaarten */
+@media (max-aspect-ratio: 10/19) {
+  :root { --hand-w: min(21.5vw, 112px); --trick-w: min(18vw, 88px); }
+  .hand { gap: 1.8vw; padding-top: 30px; }
+  .opp .av { width: 52px; height: 52px; }
+  .opp .nm { font-size: 15px; }
+  .mebar .av { width: 36px; height: 36px; }
+  .prompt { min-height: 76px; }
+}
+
+/* plaatjeskaarten: de klassieke figuur groot in beeld, B/V/H op een labeltje in de hoek */
+.card.fig .face {
+  position: absolute; inset: 5% 11%; width: auto; height: auto;
+  border: 1px solid rgba(0, 0, 0, .45); border-radius: calc(var(--w) * .05);
+}
+.card.fig .ci {
+  z-index: 2; top: 3%; left: 4%;
+  padding: 3% 4% 4%; border-radius: calc(var(--w) * .07);
+  background: var(--cream); box-shadow: 0 0 0 1px rgba(0, 0, 0, .12);
+}
+.card.fig .ci b { font-size: calc(var(--w) * .27); }
+.card.fig .ci i { font-size: calc(var(--w) * .2); }
+.card.fig .ci2 { top: auto; left: auto; bottom: 3%; right: 4%; }
+
+/* avatar kiezen in het menu */
+.avatar-pick { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.av-opt { border: 0; padding: 0; aspect-ratio: 1; border-radius: 50%; background: var(--cream); box-shadow: inset 0 0 0 2px transparent; }
+.av-opt img { width: 100%; height: 100%; display: block; border-radius: 50%; }
+.av-opt.on { box-shadow: 0 0 0 3px var(--gold); }
+
+/* expert-hulp */
+.prompt .expert {
+  flex: 1 1 100%; font-size: 14px; font-weight: 700; line-height: 1.3;
+  padding: 6px 10px; border-radius: 10px; background: rgba(33, 160, 90, .16); color: inherit;
+}
+.prompt.turn .expert { background: rgba(20, 130, 58, .12); color: #14652f; }
+.hand .card.advice { box-shadow: 0 0 0 3px #3ad07a, 0 0 16px #3ad07a, 0 4px 10px rgba(0, 0, 0, .35); }
+.hand .card.advice::after {
+  content: 'tip'; position: absolute; top: -10px; right: -6px; z-index: 3;
+  background: #3ad07a; color: #0b3a1c; font-size: 11px; font-weight: 800; text-transform: uppercase;
+  border-radius: 999px; padding: 1px 7px;
+}

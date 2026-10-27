@@ -15,7 +15,7 @@ Tip: kies in Safari/Chrome "Zet op beginscherm" (of "App installeren"), dan draa
 
 Muntjes en shop: je begint met 100 muntjes. Win je een potje met minstens één andere echte speler, dan krijg je 100 muntjes (25 als je alleen van bots wint). In de shop koop je kaartruggen en een rand om je avatar (die zien de anderen ook), een tafelkleed en een winst-effect. Alles wordt op je eigen telefoon bewaard, zonder account.
 
-Extra's: geluid en trillen (aan/uit in het ☰-menu), snelle reacties via de 😀-knop, statistieken en titels op het eindscherm, en de host kiest de stijl.
+Extra's: expert-hulp (standaard uit, aan te zetten in het ☰-menu: tipt welke kaart je het beste speelt en of je mee moet), een vaste avatar die je in het menu kiest, geluid en trillen (aan/uit in het ☰-menu), snelle reacties via de 😀-knop, statistieken en titels op het eindscherm, en de host kiest de stijl.
 
 ## Spelregels
 

@@ -324,19 +324,32 @@
   // allebei via DiceBear en meegeleverd in de map avatars/.
   const AVATAR_COUNT = 24;
   const BOT_AVATARS = ['robin', 'sebastiaan', 'martijn'];
+  function nameAvatar(name) {
+    let h = 0;
+    for (const ch of (name || '').trim().toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return (h % AVATAR_COUNT) + 1;
+  }
+  // Je eigen avatar ligt vast op deze telefoon; je kiest een andere in het menu.
+  function myAvatar() {
+    let n = Number(store('toep_avatar'));
+    if (!(n >= 1 && n <= AVATAR_COUNT)) {
+      n = nameAvatar(store('toep_name') || pid);
+      store('toep_avatar', String(n));
+    }
+    return n;
+  }
   function avatarSrc(p) {
     const name = (p && p.name ? p.name : '').trim().toLowerCase();
     if (p && p.bot) return `avatars/bot-${BOT_AVATARS.includes(name) ? name : 'bot'}.webp`;
-    let h = 0;
-    for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0; // vast gezicht per naam
-    return `avatars/p${(h % AVATAR_COUNT) + 1}.webp`;
+    if (S && p && p.seat === S.me) return `avatars/p${myAvatar()}.webp`;
+    return `avatars/p${(p && p.look && p.look.avatar) || nameAvatar(name)}.webp`;
   }
   const avatarImg = p => `<img src="${avatarSrc(p)}" alt="">`;
 
   function cardHTML(c, cls = '', attrs = '') {
     const r = rankOf(c), s = suitOf(c), label = RL[r] || r;
     const center = FIGURE_RANKS.includes(r) ? `<span class="face"><img src="cards/${r}${s}.jpg" alt=""></span>` : SYM[s];
-    return `<div class="card s${s} ${cls}" ${attrs} aria-label="${SUIT_NAME[s]} ${label}">` +
+    return `<div class="card s${s}${FIGURE_RANKS.includes(r) ? ' fig' : ''} ${cls}" ${attrs} aria-label="${SUIT_NAME[s]} ${label}">` +
       `<div class="ci"><b>${label}</b><i>${SYM[s]}</i></div>` +
       `<div class="cc">${center}</div>` +
       `<div class="ci ci2"><b>${label}</b><i>${SYM[s]}</i></div></div>`;
@@ -802,8 +815,26 @@
     }
   }
 
+  // Tekst van de expert-hulp onder de vraag in de prompt.
+  function adviceHTML() {
+    const a = S.advice;
+    if (!a) return '';
+    const pct = `${Math.round(a.chance * 100)}% kans op de ronde`;
+    let text;
+    if (a.type === 'play') {
+      const r = rankOf(a.card), label = (RL[r] || r) + SYM[suitOf(a.card)];
+      text = `Speel <b>${label}</b> (${pct})${a.toep ? ' en toep!' : ''}`;
+    } else if (a.type === 'toep') {
+      text = `${a.go ? '<b>Ga mee</b>' : '<b>Pas</b>'} (${pct})`;
+    } else {
+      text = `${a.go ? '<b>Ga mee</b>' : '<b>Ga weg</b>'} (${pct})`;
+    }
+    return `<div class="expert">🎓 Expert: ${text}</div>`;
+  }
+
   function renderPrompt() {
-    const { tone, html } = promptState();
+    const { tone, html: base } = promptState();
+    const html = base + adviceHTML();
     const el = $('#prompt');
     const cls = 'prompt' + (tone ? ' ' + tone : '');
     if (el.className !== cls) el.className = cls;
@@ -853,6 +884,7 @@
         if ((playing && legal.has(c)) || passing) cls.push('legal');
         if (selected === c || S.passCard === c) cls.push('sel');
         if (S.received === c && S.trickNo === 1 && S.phase !== 'pass') cls.push('recv');
+        if (playing && S.advice && S.advice.type === 'play' && S.advice.card === c) cls.push('advice');
         if (deal) cls.push('deal');
         return cardHTML(c, cls.join(' '), `data-card="${c}" role="button"${dealStyle(i)}`);
       }).join('') : `<div class="empty-hand">${p.dead ? 'Geen kaarten meer, je bent af.' : ''}</div>`;
@@ -1002,7 +1034,7 @@
   // ---------- geluid en trillen ----------
   // Alle geluiden worden ter plekke gemaakt (Web Audio), dus geen geluidsbestanden nodig.
 
-  const prefs = { sound: store('toep_sound') !== '0', buzz: store('toep_buzz') !== '0' };
+  const prefs = { sound: store('toep_sound') !== '0', buzz: store('toep_buzz') !== '0', expert: store('toep_expert') === '1' };
   let audioCtx = null;
 
   function audio() {
@@ -1090,6 +1122,11 @@
   function renderPrefs() {
     $('#prefSound').setAttribute('aria-pressed', String(prefs.sound));
     $('#prefBuzz').setAttribute('aria-pressed', String(prefs.buzz));
+    $('#prefExpert').setAttribute('aria-pressed', String(prefs.expert));
+    const mine = myAvatar();
+    $('#avatarPick').innerHTML = Array.from({ length: AVATAR_COUNT }, (_, i) =>
+      `<button class="av-opt${i + 1 === mine ? ' on' : ''}" data-act="avatar" data-n="${i + 1}" aria-label="Avatar ${i + 1}">` +
+      `<img src="avatars/p${i + 1}.webp" alt=""></button>`).join('');
   }
 
   // ---------- reacties ----------
@@ -1226,9 +1263,14 @@
   function syncLook() {
     const me = meP();
     if (!me || !me.look || lookPending) return;
-    if (me.look.back === wallet.equip.back && me.look.ring === wallet.equip.ring) return;
+    if (S.myExpert !== prefs.expert) {
+      lookPending = true;
+      send('expert', { on: prefs.expert }).finally(() => { lookPending = false; });
+      return;
+    }
+    if (me.look.back === wallet.equip.back && me.look.ring === wallet.equip.ring && me.look.avatar === myAvatar()) return;
     lookPending = true;
-    send('look', { back: wallet.equip.back, ring: wallet.equip.ring }).finally(() => { lookPending = false; });
+    send('look', { back: wallet.equip.back, ring: wallet.equip.ring, avatar: myAvatar() }).finally(() => { lookPending = false; });
   }
 
   function previewHTML(cat, item) {
@@ -1402,6 +1444,17 @@
       case 'buy': return buy(d.cat, d.id);
       case 'equip': return equip(d.cat, d.id);
       case 'tryEffect': return celebrate(d.id);
+      case 'toggleExpert':
+        prefs.expert = !prefs.expert;
+        store('toep_expert', prefs.expert ? '1' : '0');
+        renderPrefs();
+        if (S) syncLook();
+        return undefined;
+      case 'avatar':
+        store('toep_avatar', String(Number(d.n)));
+        renderPrefs();
+        if (S) { render(); syncLook(); }
+        return undefined;
       case 'toggleBuzz':
         prefs.buzz = !prefs.buzz;
         store('toep_buzz', prefs.buzz ? '1' : '0');
