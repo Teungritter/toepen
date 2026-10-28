@@ -1529,6 +1529,24 @@
     if (tier === 'legendarisch') celebrate('muntregen');
   }
 
+  // Gespeelde slagen terugkijken: deze ronde, en de vorige ronde.
+  let historyPrev = false;
+  function renderHistory() {
+    const el = $('#history');
+    if (el.hidden || !S) return;
+    const cur = S.tricks || [], prev = S.prevTricks || [];
+    if (!cur.length && prev.length && !historyPrev && S.phase !== 'roundEnd') historyPrev = true;
+    const list = historyPrev ? prev : cur;
+    const tabs = `<div class="hist-tabs"><button class="btn mini-btn ${historyPrev ? 'ghost' : 'primary'}" data-act="historyTab" data-prev="0">Deze ronde</button>` +
+      `<button class="btn mini-btn ${historyPrev ? 'primary' : 'ghost'}" data-act="historyTab" data-prev="1"${prev.length ? '' : ' disabled'}>Vorige ronde</button></div>`;
+    const body = list.length ? [...list].reverse().map(t =>
+      `<section class="hist-trick"><h3>Slag ${t.no}<small>${esc(nameOf(t.winner))} pakt hem</small></h3><div class="hist-cards">${
+        t.cards.map(x => `<div class="hist-card${x.seat === t.winner ? ' win' : ''}">${cardHTML(x.card)}<span>${esc(nameOf(x.seat))}</span></div>`).join('')}</div></section>`).join('')
+      : '<p class="sub">Nog geen slagen gespeeld.</p>';
+    el.innerHTML = `<div class="sheet hist-sheet"><div class="hist-head"><h2>Gespeelde slagen</h2>` +
+      `<button class="iconbtn" data-act="closeHistory" aria-label="Sluiten">✕</button></div>${tabs}${body}</div>`;
+  }
+
   function openShop() {
     closeMenu();
     shopInspect = null;
