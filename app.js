@@ -138,13 +138,13 @@
   }
 
   function hostBroadcast() {
-    const extra = { room: net.room, urls: [joinUrl()], host: true, links: linksBySeat(),
+    const extra = { room: net.room, urls: net.solo ? [] : [joinUrl()], host: true, solo: net.solo, links: linksBySeat(),
       hostSeat: (net.table.byPid(pid) || {}).seat };
     for (const c of net.conns.values()) {
       if (c.pid && c.conn.open) c.conn.send({ t: 'state', s: net.table.view(c.pid, { ...extra, host: false }) });
     }
     setState(JSON.parse(JSON.stringify(net.table.view(pid, extra))));
-    store('toep_host', JSON.stringify({ room: net.room, state: net.table.serialize(), at: Date.now() }));
+    store('toep_host', JSON.stringify({ room: net.room, solo: net.solo, state: net.table.serialize(), at: Date.now() }));
   }
 
   function onGuestData(conn, msg) {
@@ -168,8 +168,26 @@
     }
   }
 
-  function hostRoom(name, resume) {
+  // Oefenen tegen bots: alles draait op deze telefoon, zonder kamer en zonder internet.
+  function soloGame(name, resume) {
     net.role = 'host';
+    net.room = null;
+    net.solo = resume ? resume.solo : `s${Date.now().toString(36)}`;
+    net.table = new window.Toepen.Table({ hostPid: pid, onChange: hostBroadcast, isConnected: id => id === pid });
+    if (resume) {
+      net.table.restore(resume.state);
+      net.table.changed();
+    } else {
+      net.table.handle(pid, { type: 'join', name });
+      for (let i = 0; i < 3; i++) net.table.handle(pid, { type: 'addBot' });
+    }
+    store('toep_role', 'host');
+  }
+
+  function hostRoom(name, resume) {
+    if (resume && resume.solo) return soloGame(name, resume);
+    net.role = 'host';
+    net.solo = null;
     net.room = resume ? resume.room : newCode();
     net.table = new window.Toepen.Table({
       hostPid: pid,
@@ -370,7 +388,7 @@
     const resume = savedHost();
     const room = store('toep_room');
     const bits = [];
-    if (resume) bits.push(`<button class="btn ghost" type="button" data-act="resumeHost">Kamer ${esc(resume.room)} hervatten (host)</button>`);
+    if (resume) bits.push(`<button class="btn ghost" type="button" data-act="resumeHost">${resume.solo ? 'Verder met oefenen' : `Kamer ${esc(resume.room)} hervatten (host)`}</button>`);
     if (store('toep_role') !== 'host' && room) bits.push(`<button class="btn ghost" type="button" data-act="rejoin">Terug naar kamer ${esc(room)}</button>`);
     $('#homeResume').innerHTML = bits.join('');
   }
@@ -383,6 +401,9 @@
       return;
     }
     if (name) store('toep_name', name);
+    if (action === 'solo') { requestWakeLock(); return soloGame(name || 'Jij', null); }
+    const saved = action === 'resumeHost' ? savedHost() : null;
+    if (saved && saved.solo) { requestWakeLock(); return soloGame(name, saved); }
     try {
       await loadPeerJs();
     } catch (e) {
@@ -543,6 +564,7 @@
 
   function renderLobby() {
     const seated = S.me != null;
+    $('#lobby .invite').hidden = !!S.solo;
     $('#joinForm').hidden = seated;
     const P = S.players;
     const filled = P.filter(Boolean).length;
@@ -778,7 +800,12 @@
     const me = S.me, mp = meP();
     const wait = text => ({ tone: '', html: `<div class="pt"><span class="dots">${text}</span></div>` });
     if (me == null) return { tone: '', html: '<div class="pt">Je kijkt mee 👀, er is al een spel bezig.</div>' };
-    if (mp.dead) return { tone: '', html: '<div class="pt">Je bent af 💀 Kijk lekker mee en bestel een rondje.</div>' };
+    if (mp.dead) {
+      // Bij oefenen hoef je niet minutenlang naar de bots te kijken.
+      const ff = net.solo && net.table && net.table.delay >= 1
+        ? '<div class="pb"><button class="btn primary" data-act="fastForward">⏩ Snel naar het einde</button></div>' : '';
+      return { tone: '', html: '<div class="pt">Je bent af 💀 Kijk lekker mee en bestel een rondje.</div>' + ff };
+    }
 
     const extra = S.myExtra || 0;
     switch (S.phase) {
@@ -1142,11 +1169,11 @@
     let actions = '';
     if (inGame) actions += '<button class="btn dark" data-act="lobby">Spel stoppen → lobby</button>';
     if (net.role) {
-      const label = net.role === 'host' ? `Kamer ${esc(net.room)} sluiten` : `Kamer ${esc(net.room)} verlaten`;
+      const label = net.solo ? 'Stoppen met oefenen' : net.role === 'host' ? `Kamer ${esc(net.room)} sluiten` : `Kamer ${esc(net.room)} verlaten`;
       actions += `<button class="btn dark" data-act="leaveRoom">${label}</button>`;
     }
     $('#drawerActions').innerHTML = actions;
-    $('#connList').innerHTML = net.role ? connListHTML() : '';
+    $('#connList').innerHTML = net.role && !net.solo ? connListHTML() : '';
   }
 
   const LINK_LABEL = { lokaal: 'Zelfde netwerk', direct: 'Direct', relay: 'Via relay (omweg)' };
@@ -1378,7 +1405,7 @@
 
   // Muntjes voor een gewonnen potje, maar één keer per potje (ook als je herlaadt).
   function awardForGame() {
-    const key = `${S.room || ''}|${S.gamesPlayed}`;
+    const key = `${S.room || S.solo || ''}|${S.gamesPlayed}`;
     if (wallet.lastAward === key) return { amount: wallet.lastAmount, fresh: false };
     const humans = S.players.filter(p => p && !p.bot).length;
     const amount = (humans >= 2 ? WIN_COINS : BOT_WIN_COINS) + (S.buyIns ? BUY_IN_BONUS : 0);
@@ -1387,6 +1414,75 @@
     wallet.lastAmount = amount;
     saveWallet();
     return { amount, fresh: true };
+  }
+
+  // ---------- dagelijkse beloning ----------
+  // Elke dag muntjes; hoe langer je reeks, hoe meer (dag 7 en verder: 100).
+  const DAILY = [25, 30, 40, 50, 60, 75, 100];
+  const dayKey = (d = new Date()) => `${d.getFullYear()}-${d.getMonth() + 1}-${d.getDate()}`;
+
+  function dailyStatus() {
+    const d = wallet.daily || { last: '', streak: 0 };
+    const today = dayKey();
+    if (d.last === today) return null; // vandaag al opgehaald
+    const yesterday = dayKey(new Date(Date.now() - 864e5));
+    const streak = d.last === yesterday ? d.streak + 1 : 1;
+    return { streak, amount: DAILY[Math.min(streak, DAILY.length) - 1] };
+  }
+
+  function showDaily() {
+    const st = dailyStatus();
+    if (!st || !$('#intro').hidden) return;
+    const days = DAILY.map((a, i) => {
+      const n = i + 1, cls = n < st.streak ? 'done' : n === st.streak ? 'today' : '';
+      return `<li class="${cls}"><small>Dag ${n}${n === DAILY.length ? '+' : ''}</small><i class="coin"></i><b>${a}</b></li>`;
+    }).join('');
+    $('#daily').innerHTML = `<div class="sheet daily-sheet"><div class="kicker">Dagelijkse beloning</div>` +
+      `<h2>${st.streak > 1 ? `Dag ${st.streak} op rij!` : wallet.daily ? 'Welkom terug!' : 'Je eerste beloning!'}</h2>` +
+      `<p class="sub">Kom elke dag terug voor meer muntjes. Mis je een dag, dan begin je weer bij dag 1.</p>` +
+      `<ol class="daily-days">${days}</ol>` +
+      `<div class="btns"><button class="btn primary big" data-act="claimDaily">Ophalen: <i class="coin"></i>${st.amount}</button></div></div>`;
+    $('#daily').hidden = false;
+  }
+
+  function claimDaily() {
+    const st = dailyStatus();
+    $('#daily').hidden = true;
+    if (!st) return;
+    wallet.daily = { last: dayKey(), streak: st.streak };
+    wallet.coins += st.amount;
+    saveWallet();
+    play('coin');
+    toast(`+${st.amount} muntjes!`, 'coins');
+    celebrate('muntregen');
+    renderShop();
+    if (S) renderDrawer();
+  }
+
+  // ---------- uitleg voor nieuwe spelers ----------
+  const INTRO = [
+    { icon: '🃏', title: 'Toepen in 1 minuut', text: 'Iedereen krijgt 4 kaarten. Je speelt 4 slagen en je moet kleur bekennen. Van laag naar hoog: <b>B V H A 7 8 9 10</b>.' },
+    { icon: '🎯', title: 'Alleen de laatste slag telt', text: 'Wie de <b>4e slag</b> wint, wint de ronde. De rest krijgt strafpunten. Bewaar je beste kaart dus voor het laatst!' },
+    { icon: '✊', title: 'Toep!', text: 'Denk je dat je wint? <b>Toep</b> en de inzet gaat omhoog. De anderen gaan mee of passen (en krijgen dan de oude inzet als strafpunten). Bluffen mag!' },
+    { icon: '💀', title: 'Bij 15 ben je af', text: 'Op 14 sta je <b>op scherp</b>. Wie als laatste overblijft, wint het potje en verdient muntjes voor de shop.' },
+  ];
+  let introStep = 0;
+
+  function showIntro(step = 0) {
+    introStep = step;
+    const it = INTRO[step], last = step === INTRO.length - 1;
+    const dots = INTRO.map((_, i) => `<i class="${i === step ? 'on' : ''}"></i>`).join('');
+    $('#intro').innerHTML = `<div class="sheet intro-sheet"><div class="intro-icon">${it.icon}</div><h2>${it.title}</h2>` +
+      `<p class="sub">${it.text}</p><div class="intro-dots">${dots}</div>` +
+      `<div class="btns"><button class="btn primary big" data-act="introNext">${last ? 'Spelen!' : 'Volgende'}</button>` +
+      (last ? '' : '<button class="link" data-act="introDone">Overslaan</button>') + `</div></div>`;
+    $('#intro').hidden = false;
+  }
+
+  function introDone() {
+    store('toep_intro', '1');
+    $('#intro').hidden = true;
+    showDaily();
   }
 
   function buy(cat, id) {
@@ -1770,7 +1866,7 @@
       case 'go': return act('toepResponse', { go: true });
       case 'fold': return act('toepResponse', { go: false });
       case 'next': return act('next');
-      case 'rematch': return act('rematch');
+      case 'rematch': if (net.table) net.table.delay = 1; return act('rematch');
       case 'toLobby': return act('lobby');
       case 'lobby':
         if (confirm('Spel stoppen en terug naar de lobby? De stand gaat verloren.')) { closeMenu(); act('lobby'); }
@@ -1780,7 +1876,7 @@
       case 'mode': return act('settings', { mode: d.mode });
       case 'max': return act('settings', { maxPoints: Number(d.max) });
       case 'rule': return act('settings', { rule: d.rule });
-      case 'start': return act('start');
+      case 'start': if (net.table) net.table.delay = 1; return act('start');
       case 'leave': return act('leave');
       case 'openMenu': return openMenu();
       case 'openRules':
@@ -1799,13 +1895,27 @@
         return startP2P('join', code);
       }
       case 'resumeHost': return startP2P('resumeHost');
+      case 'solo': return startP2P('solo');
+      case 'claimDaily': return claimDaily();
+      case 'fastForward':
+        if (net.solo && net.table) {
+          const t = net.table;
+          t.delay = 0.08;
+          // Lopende pauze meteen afbreken, de rest gaat vanaf nu snel.
+          if (t.phase === 'trickEnd') { t.cancelAfter(); t.finishTrick(); } else if (t.phase === 'roundEnd' && !t.buyIn) t.startRound();
+          t.changed();
+        }
+        return undefined;
+      case 'introNext': return introStep < INTRO.length - 1 ? showIntro(introStep + 1) : introDone();
+      case 'introDone': return introDone();
+      case 'openIntro': closeMenu(); return showIntro(0);
       case 'rejoin': return startP2P('rejoin');
       case 'cancelConnect': return cancelConnect();
       case 'stopConnect':
         if (confirm('Stoppen met verbinden? Je gaat naar het startscherm en kunt later terug naar de kamer.')) cancelConnect();
         return undefined;
       case 'leaveRoom': {
-        const q = net.role === 'host'
+        const q = net.solo ? 'Stoppen met oefenen?' : net.role === 'host'
           ? 'Kamer sluiten? Iedereen raakt de verbinding kwijt.'
           : 'Kamer verlaten?';
         if (confirm(q)) leaveRoom();
@@ -1871,4 +1981,6 @@
     showHome();
     if (code) $(store('toep_name') ? '#homeJoinBtn' : '#homeName').focus();
   }
+  // Nieuw hier? Eerst de uitleg. Daarna (en elke nieuwe dag) de dagelijkse beloning.
+  setTimeout(() => { if (!store('toep_intro') && !code) showIntro(0); else showDaily(); }, 600);
 })();

@@ -1263,3 +1263,23 @@ details[open] > summary .chev { transform: rotate(180deg); }
   .felt::before, .felt::after, .felt-swatch::before, .felt-swatch::after, .shop-item::before,
   .logo, .inspect-prev > :first-child, .inspect-prev::before { animation: none !important; }
 }
+
+/* oefenen, dagelijkse beloning en uitleg */
+.home-hint { margin: -4px 0 0; text-align: center; font-size: 13px; color: var(--chalk-dim); font-weight: 600; }
+.daily, .intro { z-index: 52; }
+.daily-days { list-style: none; margin: 0 0 16px; padding: 0; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.daily-days li {
+  display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px 0 8px; border-radius: 10px;
+  background: rgba(0, 0, 0, .06); font-family: var(--font-display); font-size: 14px;
+}
+.daily-days li small { font-family: var(--font-body); font-size: 10px; color: var(--muted); white-space: nowrap; }
+.daily-days li .coin { margin: 2px 0 0; font-size: 18px; }
+.daily-days li.done { opacity: .45; }
+.daily-days li.today { background: var(--gold); box-shadow: 0 0 0 2px var(--gold-2), 0 0 16px rgba(255, 200, 74, .7); animation: bump 1.2s ease infinite; }
+.intro-icon { font-size: 64px; line-height: 1; margin-bottom: 6px; animation: trophyIn .6s cubic-bezier(.2, 1.4, .4, 1) both; }
+.intro-sheet .sub { font-size: 16px; line-height: 1.45; }
+.intro-dots { display: flex; justify-content: center; gap: 6px; margin: 0 0 14px; }
+.intro-dots i { width: 8px; height: 8px; border-radius: 50%; background: rgba(0, 0, 0, .15); }
+.intro-dots i.on { background: var(--orange); width: 22px; border-radius: 999px; }
+.intro-sheet .link { color: var(--muted); justify-self: center; }
+.menu-intro { width: 100%; margin-top: 10px; }

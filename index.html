@@ -29,6 +29,8 @@
     <label for="homeName">Hoe heet je?</label>
     <input id="homeName" class="field" maxlength="14" autocomplete="nickname" placeholder="Je naam">
     <button class="btn primary big" type="button" data-act="host">Kamer maken</button>
+    <button class="btn toep big" type="button" data-act="solo">Oefenen tegen bots</button>
+    <p class="home-hint">Oefenen werkt ook zonder internet.</p>
     <div class="or"><span>of doe mee met een kamer</span></div>
     <div class="row">
       <input id="homeCode" class="field code" maxlength="4" autocomplete="off" autocapitalize="characters" placeholder="CODE" aria-label="Kamercode" enterkeyhint="go">
@@ -96,6 +98,8 @@
 <div id="overlay" class="overlay" hidden></div>
 <div id="shop" class="overlay shop-overlay" hidden></div>
 <div id="inspect"></div>
+<div id="daily" class="overlay daily" hidden></div>
+<div id="intro" class="overlay intro" hidden></div>
 <div id="history" class="overlay shop-overlay" hidden></div>
 
 <!-- MENU / SPELREGELS -->
@@ -110,6 +114,7 @@
       <div><b id="drawerCoins" class="coins"><i class="coin"></i>0</b> muntjes</div>
       <button class="btn primary" data-act="openShop">Shop</button>
     </div>
+    <button class="btn ghost menu-intro" data-act="openIntro">🃏 Uitleg: hoe speel je?</button>
     <h3 class="menu-h">Instellingen</h3>
     <div class="prefs">
       <button id="prefSound" class="rule" data-act="toggleSound" aria-pressed="true">
