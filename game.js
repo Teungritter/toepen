@@ -16,6 +16,8 @@
   const FACES = ['J', 'Q', 'K', 'A'];
   const THEMES = ['cafe', 'nacht'];
   const REACTIONS = ['🍺', '👏', '😏', '😱', '😂', '🔥'];
+  const THROWS = ['tomaat', 'ei', 'bier', 'roos', 'kus', 'ezel'];  // grapjes om naar elkaar te gooien
+  const THROW_COOLDOWN = 3000;  // ms tussen twee worpen
   const AVATAR_COUNT = 24;
 
   // Instellingen van de slimme bots, afgesteld met simulaties (zie README).
@@ -150,7 +152,7 @@
   const STATE_KEYS = ['seats', 'settings', 'logs', 'logSeq', 'botSeq', 'gamesPlayed', 'phase', 'round', 'stake',
     'trick', 'trickNo', 'tricksTotal', 'turn', 'leader', 'lastToeper', 'toep', 'blind', 'scherp', 'final',
     'washCheck', 'washQueue', 'result', 'trickWinner', 'winner', 'nextRoundAt', 'deck', 'roundPlayed', 'voids',
-    'tricks', 'prevTricks', 'buyIn', 'buyIns', 'anyDied', 'blindDeadline'];
+    'tricks', 'prevTricks', 'buyIn', 'buyIns', 'anyDied', 'blindDeadline', 'pot'];
 
   class Table {
     constructor({ onChange = () => {}, isConnected = () => true, delay = 1, hostPid = null } = {}) {
@@ -164,6 +166,7 @@
         maxPoints: 15,
         theme: 'cafe',
         rules: { was: true, pass: true, double: true, boer: true, comeback: true },
+        money: 0, // inzet per potje in centen (nepgeld, zoals in de kroeg); 0 = niet om geld
       };
       this.logs = [];
       this.logSeq = 0;
@@ -271,6 +274,7 @@
           case 'settings': this.setSettings(msg); break;
           case 'theme': this.setTheme(pid, msg.theme); break;
           case 'react': this.react(p, msg.emoji); break;
+          case 'throw': this.throwAt(p, msg.item, msg.target); break;
           case 'look': this.setLook(p, msg); break;
           case 'expert': p.expert = !!msg.on; break;
           case 'start': this.start(); break;
@@ -375,6 +379,7 @@
       if (['klassiek', 'kroeg', 'finale'].includes(m.mode)) s.mode = m.mode;
       if (m.maxPoints === 10 || m.maxPoints === 15) s.maxPoints = m.maxPoints;
       if (m.rule in s.rules) s.rules[m.rule] = !s.rules[m.rule];
+      if (Number.isInteger(m.money) && m.money >= 0 && m.money <= 10000) s.money = m.money;
     }
 
     // Uiterlijk uit de shop dat de anderen ook zien. Wat je bezit, houdt elke
@@ -418,6 +423,25 @@
       this.reactSeq++;
       this.reactions.push({ id: this.reactSeq, seat: p.seat, emoji });
       this.reactions = this.reactions.slice(-12);
+    }
+
+    // Een tomaat, ei, biertje... naar iemand gooien. Bots gooien soms iets terug.
+    throwAt(p, item, target) {
+      if (!THROWS.includes(item)) fail('Dat kun je niet gooien.');
+      const q = this.seats[target];
+      if (!q || q === p) fail('Kies iemand anders om naar te gooien.');
+      const now = Date.now();
+      if (now - (p.lastThrow || 0) < THROW_COOLDOWN) fail('Even wachten voor je weer gooit.');
+      p.lastThrow = now;
+      this.reactSeq++;
+      this.reactions.push({ id: this.reactSeq, seat: p.seat, throw: item, target });
+      this.reactions = this.reactions.slice(-12);
+      if (q.bot && !p.bot && Math.random() < 0.35) {
+        setTimeout(() => {
+          if (this.seats[target] !== q || this.seats[p.seat] !== p) return;
+          try { this.throwAt(q, Math.random() < 0.5 ? item : THROWS[Math.floor(Math.random() * THROWS.length)], p.seat); this.changed(); } catch (e) { /* even niet */ }
+        }, 1600 + Math.random() * 1200);
+      }
     }
 
     // Stijl van het spel voor iedereen; mag ook tijdens het spel.
@@ -779,14 +803,21 @@
     // ---------- toepen ----------
 
     // Reden waarom p niet mag toepen vanwege 'op scherp' of de finale, anders null.
+    // Is q bij verlies van deze ronde (met de huidige inzet) toch al af? Dan maakt een
+    // hogere inzet voor q niets meer uit: je kunt nooit boven de 15 eindigen.
+    atLimit(q, stake = this.stake) {
+      return q.points + stake + (q.extra || 0) >= this.settings.maxPoints;
+    }
+
     toepBlocked(p) {
       if (this.final) return 'In de finale wordt niet getoept.';
       if (p.points >= this.edge) return `Op ${this.edge} punten mag je niet toepen.`;
-      // Je kunt niet boven de 15 eindigen, dus tegen iemand op 14 heeft toepen geen zin.
-      // Staat er nog iemand anders niet op 14, dan kun je wel tegen die toepen.
+      if (this.atLimit(p)) return `Je bent bij verlies toch al af, dus toepen kan niet.`;
+      // Tegen iemand die bij verlies toch al af is (bv. op 14, of op 13 bij inzet 2),
+      // heeft toepen geen zin. Staat er nog iemand anders in, dan kan het wel tegen die.
       const others = this.active().filter(q => q !== p);
-      if (others.length && others.every(q => q.points >= this.edge)) {
-        return `${others.map(q => q.name).join(' en ')} ${others.length > 1 ? 'staan' : 'staat'} op ${this.edge}: daar kun je niet tegen toepen.`;
+      if (others.length && others.every(q => this.atLimit(q))) {
+        return `${others.map(q => q.name).join(' en ')} ${others.length > 1 ? 'zijn' : 'is'} bij verlies toch al af: daar kun je niet tegen toepen.`;
       }
       return null;
     }
@@ -815,14 +846,14 @@
       const others = this.orderFrom(p.seat).filter(s => s !== p.seat && !this.seats[s].dead && !this.seats[s].folded);
       this.toep = {
         by: p.seat, amount, prev, responses: {},
-        pending: others.filter(s => this.seats[s].points < this.edge),
+        pending: others.filter(s => !this.atLimit(this.seats[s], prev)),
       };
       this.phase = 'toep';
       this.log(`${p.name} ${amount === 2 ? 'toept dubbel' : 'toept'}! Inzet ${prev} → ${this.stake}`, 'toep', { seat: p.seat, amount });
-      // Wie op 14 staat, gaat automatisch mee (en eindigt hooguit op 15).
-      for (const s of others.filter(s => this.seats[s].points >= this.edge)) {
+      // Wie bij passen toch al af zou zijn, gaat automatisch mee (en eindigt hooguit op 15).
+      for (const s of others.filter(s => this.atLimit(this.seats[s], prev))) {
         this.toep.responses[s] = true;
-        this.log(`${this.seats[s].name} staat op ${this.edge} en gaat automatisch mee`, 'quiet');
+        this.log(`${this.seats[s].name} is bij passen toch af en gaat automatisch mee`, 'quiet');
       }
     }
 
@@ -962,6 +993,13 @@
       }
       this.winner = winnerSeat;
       this.gamesPlayed++;
+      // Om geld: iedereen legt de inzet in, de winnaar pakt de pot.
+      const stake = this.settings.money || 0;
+      this.pot = 0;
+      if (stake && winnerSeat >= 0) {
+        for (const p of this.seated()) { p.money = (p.money || 0) - stake; this.pot += stake; }
+        this.seats[winnerSeat].money += this.pot;
+      }
       if (winnerSeat >= 0) {
         const winner = this.seats[winnerSeat];
         winner.wins++;
@@ -1236,7 +1274,7 @@
       if (!p) return null;
       return {
         seat: p.seat, name: p.name, bot: p.bot, level: p.bot ? p.level : null,
-        points: p.points, wins: p.wins, stats: p.stats, look: p.look, dead: p.dead, folded: p.folded, cards: p.hand.length, extra: p.extra,
+        points: p.points, wins: p.wins, money: p.money || 0, stats: p.stats, look: p.look, dead: p.dead, folded: p.folded, cards: p.hand.length, extra: p.extra,
         online: p.bot || this.isConnected(p.id), acting: this.needsAction(p),
       };
     }
@@ -1259,7 +1297,7 @@
         result: this.result,
         nextRoundIn: ph === 'roundEnd' ? Math.max(0, this.nextRoundAt - Date.now()) : 0,
         blindIn: ph === 'blind' ? Math.max(0, (this.blindDeadline || 0) - Date.now()) : 0,
-        winner: this.winner, log: this.logs.slice(-20), reactions: this.reactions,
+        winner: this.winner, pot: this.pot || 0, log: this.logs.slice(-20), reactions: this.reactions,
       };
       if (me) {
         // Bij blind kijkt niemand: de kaarten blijven dicht tot je 'gezien' kiest.
@@ -1283,5 +1321,5 @@
     }
   }
 
-  root.Toepen = { Table, GameError, LEVELS, MAX_BLINDS, THEMES, REACTIONS, BOT_STRATEGY };
+  root.Toepen = { Table, GameError, LEVELS, MAX_BLINDS, THEMES, REACTIONS, THROWS, BOT_STRATEGY };
 })(typeof window !== 'undefined' ? window : globalThis);

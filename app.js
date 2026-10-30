@@ -562,6 +562,11 @@
 
   // ----- lobby -----
 
+  // Bedragen in euro's, zoals €1 of €2,50.
+  const euro = c => (c % 100 === 0 ? `€${c / 100}` : `€${(c / 100).toFixed(2).replace('.', ',')}`);
+  const signedEuro = c => (c > 0 ? '+' : c < 0 ? '−' : '') + euro(Math.abs(c));
+  const MONEY_OPTS = [0, 100, 250, 500];
+
   function renderLobby() {
     const seated = S.me != null;
     $('#lobby .invite').hidden = !!S.solo;
@@ -581,6 +586,7 @@
       return `<li class="seat ${isMe ? 'me' : ''}"><span class="av">${avatarImg(p)}</span>` +
         `<span class="nm">${esc(p.name)}${isMe ? ' <em>(jij)</em>' : ''}</span>` +
         (p.wins ? `<span class="wins" title="Gewonnen potjes">🏆 ${p.wins}</span>` : '') +
+        (p.money ? `<span class="cash ${p.money > 0 ? 'up' : 'down'}" title="Saldo (nepgeld)">${signedEuro(p.money)}</span>` : '') +
         (p.bot
           ? (seated
             ? `<button class="mini lvl lvl-${p.level}" data-act="botLevel" data-seat="${i}" aria-label="Niveau wijzigen">${LEVEL_NAME[p.level]} ▾</button>` +
@@ -631,6 +637,14 @@
           <button data-act="mode" data-mode="finale" aria-pressed="${finale}" ${dis}>Finale</button>
         </div>
         ${rules}
+      </section>
+      <section class="panel">
+        <div class="panel-head"><h2>Om geld spelen</h2><span class="count">nepgeld</span></div>
+        <div class="seg money-seg">
+          ${MONEY_OPTS.map(c => `<button data-act="money" data-cents="${c}" aria-pressed="${(st.money || 0) === c}" ${dis}>${c ? euro(c) : 'Nee'}</button>`).join('')}
+          <button data-act="moneyCustom" aria-pressed="${!!st.money && !MONEY_OPTS.includes(st.money)}" ${dis}>${st.money && !MONEY_OPTS.includes(st.money) ? euro(st.money) : 'Eigen'}</button>
+        </div>
+        <p class="note" style="margin:10px 0 0">${st.money ? `Iedereen legt ${euro(st.money)} in, de winnaar pakt de pot.` : 'Zoals in de kroeg: iedereen legt in en de winnaar pakt de pot.'} Alleen voor de lol, er wordt niet echt betaald.</p>
       </section>
       <details class="panel more" id="moreSettings" ${moreOpen ? 'open' : ''}>
         <summary><h2>Meer instellingen</h2><span class="chev" aria-hidden="true">▾</span></summary>
@@ -739,7 +753,7 @@
     const chip = statusChip(p);
     const look = p.look || { back: 'rood', ring: 'geen' };
     const backs = Array.from({ length: p.cards }, () => `<i class="mback b-${look.back}"></i>`).join('');
-    return `<div class="opp ${p.acting ? 'acting' : ''} ${p.folded ? 'folded' : ''} ${p.dead ? 'dead' : ''}" data-seat="${p.seat}">
+    return `<div class="opp ${p.acting ? 'acting' : ''} ${p.folded ? 'folded' : ''} ${p.dead ? 'dead' : ''}" data-seat="${p.seat}" data-act="throwPick">
       <div class="av r-${look.ring}">${avatarImg(p)}${p.online ? '' : '<span class="off" title="Offline">!</span>'}</div>
       <div class="ob">
         <div class="nm">${esc(p.name)}</div>
@@ -1046,7 +1060,7 @@
         else if (l.note === 'comeback') note = 'comeback!';
       }
       if (p.dead) note = note ? note + ' · af' : 'af';
-      if (!result) note = `🏆 ${p.wins}× gewonnen` + (p.dead ? ' · af' : '');
+      if (!result) note = (p.money ? `${signedEuro(p.money)} · ` : '') + `🏆 ${p.wins}× gewonnen` + (p.dead ? ' · af' : '');
       const isWin = result ? result.winner === p.seat : S.winner === p.seat;
       return { p, html: `<li class="${isWin ? 'win' : ''} ${p.dead ? 'out' : ''}">` +
         `<span class="av">${avatarImg(p)}</span>` +
@@ -1093,6 +1107,7 @@
       if (award && award.fresh) { toast(`+${award.amount} muntjes!`, 'coins'); play('coin'); }
       html = `<div class="sheet"><div class="trophy">🏆</div><h2>${w}</h2>` +
         (award ? `<p class="coins-won"><i class="coin"></i>+${award.amount} muntjes <small>(je hebt er nu ${wallet.coins})</small></p>` : '') + `<p class="sub">Potje ${S.gamesPlayed}, na ${S.round} ronde${S.round === 1 ? '' : 's'}. Wie geeft er een rondje?</p>` +
+        (S.pot ? `<p class="pot">💶 ${S.winner === S.me ? 'Jij pakt' : `${esc(nameOf(S.winner))} pakt`} de pot: <b>${euro(S.pot)}</b></p>` : '') +
         standingsHTML(null) + statsHTML() +
         (seated ? `<div class="btns"><button class="btn primary big" data-act="rematch">Nog een potje!</button>` +
           `<button class="btn dark" data-act="toLobby">Naar de lobby</button></div>` : '') + `</div>`;
@@ -1160,7 +1175,7 @@
     const logs = (S.log || []).filter(l => l.kind !== 'quiet' || /Ronde|begint/.test(l.text));
     const board = S.players.filter(Boolean).sort((a, b) => b.wins - a.wins);
     $('#winList').innerHTML = S.gamesPlayed
-      ? board.map(p => `<li>${esc(p.name)}: ${p.wins}× gewonnen</li>`).join('')
+      ? board.map(p => `<li>${esc(p.name)}: ${p.wins}× gewonnen${p.money ? ` (${signedEuro(p.money)})` : ''}</li>`).join('')
       : '<li>Nog geen potje uitgespeeld.</li>';
     $('#logList').innerHTML = logs.slice(-12).map(l => `<li>${esc(l.text)}</li>`).join('') || '<li>Nog niets gebeurd.</li>';
     const inGame = S.phase !== 'lobby' && S.me != null;
@@ -1268,6 +1283,8 @@
     win: ctx => [523, 659, 784, 1047].forEach((f, i) => tone(ctx, f, i * 0.1, 0.25, 'triangle', 0.15)),
     champion: ctx => [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => tone(ctx, f, i * 0.12, 0.3, 'triangle', 0.15)),
     lose: ctx => { tone(ctx, 392, 0, 0.22, 'sine', 0.12); tone(ctx, 311, 0.2, 0.35, 'sine', 0.12); },
+    whoosh: ctx => noise(ctx, 0, 0.35, 0.12, 900),
+    splat: ctx => { noise(ctx, 0, 0.12, 0.5, 600); thump(ctx, 0); },
   };
 
   function play(name) {
@@ -1297,6 +1314,97 @@
 
   const REACTIONS = ['🍺', '👏', '😏', '😱', '😂', '🔥'];
 
+  // Grapjes om naar elkaar te gooien (tik op iemands avatar).
+  const THROW_ITEMS = [
+    { id: 'tomaat', icon: '🍅', name: 'Tomaat', hit: 'SPLAT!', color: '#e0301e', splat: true },
+    { id: 'ei', icon: '🥚', name: 'Ei', hit: 'KRAK!', color: '#ffd84a', splat: true },
+    { id: 'bier', icon: '🍺', name: 'Biertje', hit: 'PROOST!', color: '#ffb52e', foam: true },
+    { id: 'roos', icon: '🌹', name: 'Roos', hit: '♥', color: '#ff4f7b', hearts: true },
+    { id: 'kus', icon: '💋', name: 'Kus', hit: 'MUAH!', color: '#ff3c8e', hearts: true, stamp: true },
+    { id: 'ezel', icon: '🐴', name: 'Ezel', hit: 'IIIAA!', color: '#c9955f', stamp: true },
+  ];
+  const THROW_COOLDOWN = 3000;
+  let lastThrowAt = 0;
+  let throwTimer = null;
+
+  const avAnchor = seat => (seat === S.me ? $('#mebar .av') : document.querySelector(`.opp[data-seat="${seat}"] .av`));
+  function centerOf(el) {
+    if (!el) return { x: innerWidth / 2, y: innerHeight - 120 };
+    const r = el.getBoundingClientRect();
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+  }
+
+  function openThrowTray(seat) {
+    const p = S.players[seat];
+    if (!p || S.me == null || seat === S.me) return;
+    const tray = $('#throwTray');
+    const wait = Math.ceil((THROW_COOLDOWN - (Date.now() - lastThrowAt)) / 1000);
+    tray.innerHTML = `<div class="tt-head">${wait > 0 ? `Even wachten… ${wait}s` : `Gooi naar <b>${esc(p.name)}</b>`}</div><div class="tt-items">` +
+      THROW_ITEMS.map(t => `<button data-act="throw" data-item="${t.id}" data-seat="${seat}" ${wait > 0 ? 'disabled' : ''} aria-label="${t.name}">` +
+        `<span>${t.icon}</span><small>${t.name}</small></button>`).join('') + `</div>`;
+    tray.hidden = false;
+    const a = centerOf(avAnchor(seat));
+    const w = tray.offsetWidth, h = tray.offsetHeight;
+    tray.style.left = `${Math.min(innerWidth - w - 8, Math.max(8, a.x - w / 2))}px`;
+    tray.style.top = `${Math.min(innerHeight - h - 8, Math.max(8, a.y + 34))}px`;
+    tray.dataset.seat = seat;
+    clearTimeout(throwTimer);
+    if (wait > 0) throwTimer = setTimeout(() => { if (!tray.hidden) openThrowTray(seat); }, 1000);
+  }
+
+  function throwItem(item, seat) {
+    if (Date.now() - lastThrowAt < THROW_COOLDOWN) return openThrowTray(seat);
+    lastThrowAt = Date.now();
+    $('#throwTray').hidden = true;
+    return act('throw', { item, target: Number(seat) });
+  }
+
+  // Het ding vliegt in een boog van de gooier naar het doelwit en spat daar uiteen.
+  function showThrow(from, to, id) {
+    const it = THROW_ITEMS.find(t => t.id === id);
+    const target = avAnchor(to);
+    if (!it || !target) return;
+    const f = centerOf(avAnchor(from)), t = centerOf(target);
+    const el = document.createElement('div');
+    el.className = 'throwfly';
+    el.textContent = it.icon;
+    el.style.left = `${f.x}px`;
+    el.style.top = `${f.y}px`;
+    $('#bubbles').append(el);
+    const dx = t.x - f.x, dy = t.y - f.y, lift = -60 - Math.abs(dx) * 0.25;
+    play('whoosh');
+    const anim = el.animate([
+      { transform: 'translate(-50%, -50%) scale(.5) rotate(0deg)' },
+      { transform: `translate(calc(-50% + ${dx / 2}px), calc(-50% + ${dy / 2 + lift}px)) scale(1.25) rotate(320deg)`, offset: 0.5 },
+      { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(1) rotate(640deg)` },
+    ], { duration: 700, easing: 'cubic-bezier(.45, 0, .55, 1)', fill: 'forwards' });
+    anim.onfinish = () => { el.remove(); impact(t, target, it); };
+  }
+
+  function impact(t, target, it) {
+    const box = $('#bubbles');
+    const add = (cls, css, html = '', life = 1800) => {
+      const e = document.createElement('div');
+      e.className = cls;
+      e.style.cssText = `left:${t.x}px;top:${t.y}px;${css}`;
+      e.innerHTML = html;
+      box.append(e);
+      setTimeout(() => e.remove(), life);
+      return e;
+    };
+    if (it.splat) add('splat', `--c:${it.color}`, '<i></i><i></i><i></i>', 2200);
+    if (it.foam) for (let i = 0; i < 10; i++) add('foam', `--dx:${Math.random() * 70 - 35}px;--dy:${-30 - Math.random() * 50}px;animation-delay:${Math.random() * 0.2}s`, '', 1300);
+    if (it.hearts) for (let i = 0; i < 7; i++) add('heart', `--dx:${Math.random() * 80 - 40}px;color:${it.color};animation-delay:${i * 0.08}s`, '♥', 1700);
+    if (it.stamp) add('stamp-fx', '', it.icon, 2400);
+    add('hitword', `color:${it.color};left:${Math.min(innerWidth - 70, Math.max(70, t.x))}px`, it.hit, 1300);
+    target.classList.remove('hit');
+    void target.offsetWidth;
+    target.classList.add('hit');
+    setTimeout(() => target.classList.remove('hit'), 700);
+    play(it.splat ? 'splat' : 'pop');
+    if (target === $('#mebar .av')) buzz(40);
+  }
+
   function handleReactions() {
     const list = S.reactions || [];
     const last = list.length ? list[list.length - 1].id : 0;
@@ -1304,7 +1412,9 @@
     for (const r of list) {
       if (r.id <= seenReact) continue;
       seenReact = r.id;
-      if (S.phase !== 'lobby') showBubble(r.seat, r.emoji);
+      if (S.phase === 'lobby') continue;
+      if (r.throw) showThrow(r.seat, r.target, r.throw);
+      else showBubble(r.seat, r.emoji);
     }
   }
 
@@ -1430,6 +1540,31 @@
     return { streak, amount: DAILY[Math.min(streak, DAILY.length) - 1] };
   }
 
+  // Eenmalig cadeau voor iedereen die het spel deze week opent.
+  const GIFT = { id: 'bedankt-2026-11', amount: 1000, until: new Date(2026, 10, 6, 23, 59, 59).getTime() };
+
+  function showGift() {
+    if (Date.now() > GIFT.until || (wallet.gifts || []).includes(GIFT.id) || !$('#intro').hidden) return false;
+    $('#daily').innerHTML = `<div class="sheet daily-sheet gift-sheet"><div class="gift-icon">🎁</div><div class="kicker">Cadeautje</div>` +
+      `<h2>Bedankt voor het spelen!</h2><p class="sub">Als bedankje krijg je eenmalig <b>${GIFT.amount.toLocaleString('nl-NL')} muntjes</b>. Tijd om de shop leeg te kopen!</p>` +
+      `<div class="btns"><button class="btn primary big" data-act="claimGift">Ophalen: <i class="coin"></i>${GIFT.amount.toLocaleString('nl-NL')}</button></div></div>`;
+    $('#daily').hidden = false;
+    return true;
+  }
+
+  function claimGift() {
+    $('#daily').hidden = true;
+    if ((wallet.gifts || []).includes(GIFT.id)) return;
+    wallet.gifts = [...(wallet.gifts || []), GIFT.id];
+    wallet.coins += GIFT.amount;
+    saveWallet();
+    play('champion');
+    toast(`+${GIFT.amount} muntjes!`, 'coins');
+    celebrate('muntregen');
+    if (S) renderDrawer();
+    setTimeout(showDaily, 1200);
+  }
+
   function showDaily() {
     const st = dailyStatus();
     if (!st || !$('#intro').hidden) return;
@@ -1482,7 +1617,7 @@
   function introDone() {
     store('toep_intro', '1');
     $('#intro').hidden = true;
-    showDaily();
+    if (!showGift()) showDaily();
   }
 
   function buy(cat, id) {
@@ -1796,6 +1931,8 @@
       case 'theme': return act('theme', { theme: d.key });
       case 'reactMenu': return toggleReactTray();
       case 'react': toggleReactTray(false); return act('react', { emoji: d.emoji });
+      case 'throwPick': return openThrowTray(Number(d.seat));
+      case 'throw': return throwItem(d.item, d.seat);
       case 'toggleSound':
         prefs.sound = !prefs.sound;
         store('toep_sound', prefs.sound ? '1' : '0');
@@ -1876,6 +2013,14 @@
       case 'mode': return act('settings', { mode: d.mode });
       case 'max': return act('settings', { maxPoints: Number(d.max) });
       case 'rule': return act('settings', { rule: d.rule });
+      case 'money': return act('settings', { money: Number(d.cents) });
+      case 'moneyCustom': {
+        const v = prompt('Eigen inzet in euro (bijv. 0,50 of 10):', S.settings.money ? (S.settings.money / 100).toFixed(2).replace('.', ',') : '');
+        if (v === null) return undefined;
+        const cents = Math.round(parseFloat(v.replace(',', '.').replace(/[^0-9.]/g, '')) * 100);
+        if (!(cents >= 10 && cents <= 10000)) return toast('Kies een bedrag tussen €0,10 en €100.', 'err');
+        return act('settings', { money: cents });
+      }
       case 'start': if (net.table) net.table.delay = 1; return act('start');
       case 'leave': return act('leave');
       case 'openMenu': return openMenu();
@@ -1897,6 +2042,7 @@
       case 'resumeHost': return startP2P('resumeHost');
       case 'solo': return startP2P('solo');
       case 'claimDaily': return claimDaily();
+      case 'claimGift': return claimGift();
       case 'fastForward':
         if (net.solo && net.table) {
           const t = net.table;
@@ -1927,6 +2073,7 @@
 
   document.addEventListener('click', e => {
     if (!e.target.closest('#reactTray, .react-btn')) $('#reactTray').hidden = true;
+    if (!e.target.closest('#throwTray, .opp')) $('#throwTray').hidden = true;
     const a = e.target.closest('[data-act]');
     if (a) {
       if (a.disabled) return;
@@ -1982,5 +2129,5 @@
     if (code) $(store('toep_name') ? '#homeJoinBtn' : '#homeName').focus();
   }
   // Nieuw hier? Eerst de uitleg. Daarna (en elke nieuwe dag) de dagelijkse beloning.
-  setTimeout(() => { if (!store('toep_intro') && !code) showIntro(0); else showDaily(); }, 600);
+  setTimeout(() => { if (!store('toep_intro') && !code) showIntro(0); else if (!showGift()) showDaily(); }, 600);
 })();
